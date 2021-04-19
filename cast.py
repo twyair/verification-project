@@ -18,9 +18,9 @@ class AstType(enum.Enum):
     eq = "="
     gt = ">"
     AND_OP = "AND_OP"
-    CONSTANT = "CONSTANT"
+    CONSTANT = "CONSTANT"  # V
     ELSE = "ELSE"
-    IDENTIFIER = "IDENTIFIER"
+    IDENTIFIER = "IDENTIFIER"  # V
     IF = "IF"
     INT = "INT"
     LE_OP = "LE_OP"
@@ -28,7 +28,7 @@ class AstType(enum.Enum):
     VOID = "VOID"
     EQ_OP = "EQ_OP"
     OR_OP = "OR_OP"
-    additive_expression = "additive_expression"
+    additive_expression = "additive_expression"  # V
     assignment_expression = "assignment_expression"  # V
     block_item_list = "block_item_list"  # V
     compound_statement = "compound_statement"  # V
@@ -42,7 +42,7 @@ class AstType(enum.Enum):
     logical_or_expression = "logical_or_expression"  # V
     parameter_declaration = "parameter_declaration"  # X
     parameter_list = "parameter_list"  # X
-    postfix_expression = "postfix_expression"  # V ~  TODO: find out if there are any kinds of expressions that fall under this type (other than function calls)
+    postfix_expression = "postfix_expression"  # V
     primary_expression = "primary_expression"  # V
     relational_expression = "relational_expression"  # V
     selection_statement = "selection_statement"  # V
