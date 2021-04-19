@@ -55,7 +55,7 @@ class BinBoolExpr(BoolExpr):
             assert False
 
 
-@dataclass
+@dataclass(frozen=True)
 class NotBoolExpr(BoolExpr):
     operand: BoolExpr
 
@@ -143,3 +143,34 @@ class NumericExpr(Expr):
 
     def __str__(self) -> str:
         return f"{self.number}"
+
+
+@dataclass(frozen=True)
+class ChangeArrayExpr(Expr):
+    array: Expr
+    index: Expr
+    value: Expr
+
+    def assign(self, vars: Dict[str, "Expr"]) -> "ChangeArrayExpr":
+        return ChangeArrayExpr(
+            array=self.array.assign(vars),
+            index=self.index.assign(vars),
+            value=self.value.assign(vars),
+        )
+
+    def __str__(self) -> str:
+        return f"Store({self.array}, {self.index}, {self.value})"
+
+
+@dataclass(frozen=True)
+class ArrayItemExpr(Expr):
+    array: Expr
+    index: Expr
+
+    def assign(self, vars: Dict[str, "Expr"]) -> "ArrayItemExpr":
+        return ArrayItemExpr(
+            array=self.array.assign(vars), index=self.index.assign(vars)
+        )
+
+    def __str__(self) -> str:
+        return f"{self.array}[{self.index}]"

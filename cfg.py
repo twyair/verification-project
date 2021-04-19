@@ -57,7 +57,6 @@ class AssignmentNode(CfgNode):
 
     def generate_rt(self, r: R, t: T) -> Iterator[Tuple[R, T]]:
         t_next = t.copy()
-        # TODO: handle arrays
         t_next[self.var.var] = self.expression.assign(t)
         yield from self.next_node.generate_rt(r, t_next)
 
