@@ -1,9 +1,11 @@
 import json
 from typing import Iterator, List, Tuple
 from cast import AstNode, parse, AstType
-from cfg import make_expr, create_cfg
+from cfg import AssignmentNode, CfgNode, CondNode, StartNode, make_expr, create_cfg
 from expr import BinBoolExpr, BoolExpr
 from functools import reduce
+import networkx as nx
+import matplotlib.pyplot as plt
 
 def get_first_child(node: AstNode, pred) -> AstNode:
     return next(c for c in node.children if pred(c))
@@ -42,3 +44,21 @@ def get_proof_rule(fn: AstNode, q2: BoolExpr) -> List[Tuple[BoolExpr, BoolExpr]]
 
 def proof_rule_as_string(rule: Tuple[BoolExpr, BoolExpr]) -> str:
     return f"{rule[0]} → {rule[1]}"
+
+def cfg_as_graph(cfg: CfgNode):
+    G = nx.DiGraph()
+    labels = {}
+    def traverse(node: CfgNode):
+        labels[id(node)] = str(type(node))
+        if isinstance(node, (StartNode, AssignmentNode)):
+            G.add_edge(id(node), id(node.next_node))
+            traverse(node.next_node)
+        elif isinstance(node, CondNode):
+            G.add_edge(id(node), id(node.true_br))
+            G.add_edge(id(node), id(node.false_br))
+            traverse(node.true_br)
+            traverse(node.false_br)
+    traverse(cfg)
+    nx.draw(G)
+    plt.draw()
+    plt.show()
