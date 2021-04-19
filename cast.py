@@ -26,25 +26,28 @@ class AstType(enum.Enum):
     LE_OP = "LE_OP"
     RETURN = "RETURN"
     VOID = "VOID"
+    EQ_OP = "EQ_OP"
+    OR_OP = "OR_OP"
     additive_expression = "additive_expression"
-    assignment_expression = "assignment_expression"
-    block_item_list = "block_item_list"
-    compound_statement = "compound_statement"
-    declaration = "declaration"
-    direct_declarator = "direct_declarator"
-    expression_statement = "expression_statement"
-    function_definition = "function_definition"
-    init_declarator = "init_declarator"
-    jump_statement = "jump_statement"  # return
-    logical_and_expression = "logical_and_expression"
-    logical_or_expression = "logical_or_expression"
-    parameter_declaration = "parameter_declaration"
-    parameter_list = "parameter_list"
-    postfix_expression = "postfix_expression"
-    primary_expression = "primary_expression"
-    relational_expression = "relational_expression"
-    selection_statement = "selection_statement"  # if
-    translation_unit = "translation_unit"
+    assignment_expression = "assignment_expression"  # V
+    block_item_list = "block_item_list"  # V
+    compound_statement = "compound_statement"  # V
+    declaration = "declaration"  # V
+    direct_declarator = "direct_declarator"  # V
+    expression_statement = "expression_statement"  # V
+    function_definition = "function_definition"  # V
+    init_declarator = "init_declarator"  # V
+    jump_statement = "jump_statement"  # V
+    logical_and_expression = "logical_and_expression"  # V
+    logical_or_expression = "logical_or_expression"  # V
+    parameter_declaration = "parameter_declaration"  # X
+    parameter_list = "parameter_list"  # X
+    postfix_expression = "postfix_expression"  # V ~  TODO: find out if there are any kinds of expressions that fall under this type (other than function calls)
+    primary_expression = "primary_expression"  # V
+    relational_expression = "relational_expression"  # V
+    selection_statement = "selection_statement"  # V
+    translation_unit = "translation_unit"  # V
+    equality_expression = "equality_expression"  # V
 
 
 @dataclass

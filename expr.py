@@ -168,6 +168,8 @@ class ArrayItemExpr(Expr):
     index: Expr
 
     def assign(self, vars: Dict[str, "Expr"]) -> "ArrayItemExpr":
+        if self.index is None:
+            assert f"{self.index}"
         return ArrayItemExpr(
             array=self.array.assign(vars), index=self.index.assign(vars)
         )
