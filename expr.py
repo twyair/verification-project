@@ -9,7 +9,7 @@ class BoolExpr:
 
 
 @dataclass(frozen=True)
-class RelExpr:
+class RelExpr(BoolExpr):
     operator: str  # == != < <= > >=
     lhs: "Expr"
     rhs: "Expr"
