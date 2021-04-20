@@ -65,6 +65,9 @@ class AstNode:
     range: AstRange
     children: List["AstNode"]
 
+    def __getitem__(self, index: int) -> "AstNode":
+        return self.children[index]
+
 
 def parse(ast: Dict[str, Any]) -> AstNode:
     return AstNode(

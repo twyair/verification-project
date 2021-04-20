@@ -9,7 +9,7 @@ from cfg import (
     CondNode,
     EndNode,
     StartNode,
-    make_expr,
+    make_bool_expr,
     create_cfg,
 )
 from expr import BinBoolExpr, BoolExpr
@@ -21,16 +21,16 @@ def get_first_child(node: AstNode, pred) -> AstNode:
 
 
 def find_ensures(fn: AstNode) -> AstNode:
-    statements = fn.children[-1].children[1].children
+    statements = fn[-1][1].children
     for s in statements:
         if (
             s.type == AstType.expression_statement
-            and s.children[0].type == AstType.postfix_expression
-            and s.children[0].children[1].type == AstType.paren_left
-            and s.children[0].children[0].type == AstType.IDENTIFIER
-            and s.children[0].children[0].text in ("ensures", "assert")
+            and s[0].type == AstType.postfix_expression
+            and s[0][1].type == AstType.paren_left
+            and s[0][0].type == AstType.IDENTIFIER
+            and s[0][0].text in ("ensures", "assert")
         ):
-            return s.children[0].children[2]
+            return s[0][2]
     assert False
 
 
@@ -66,8 +66,7 @@ class Function:
             lambda c: c.type == AstType.IDENTIFIER,
         ).text
         assert name is not None
-        ensures = make_expr(find_ensures(ast))
-        assert isinstance(ensures, BoolExpr)
+        ensures = make_bool_expr(find_ensures(ast))
         return Function(q2=ensures, cfg=create_cfg(ast), name=name)
 
     def get_proof_rule(self) -> List[Tuple[BoolExpr, BoolExpr]]:
