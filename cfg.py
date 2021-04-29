@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import dataclasses
 from expr import (
     ArrayItemExpr,
+    BinExpr,
     BoolExpr,
     ChangeArrayExpr,
     Expr,
@@ -143,7 +144,7 @@ class AssertNode(CfgNode):
 
 
 def statement_create_cfg(
-    ast: AstNode, next_node: CfgNode, end_node: EndNode
+    ast: AstNode, next_node: CfgNode, end_node: EndNode, loop_start: Optional[CfgNode], loop_end: Optional[CfgNode]
 ) -> CfgNode:
     if ast.type == AstType.semicolon:
         return next_node
@@ -152,8 +153,8 @@ def statement_create_cfg(
         assert ast[0].type == AstType.IF
         return CondNode(
             condition=BoolExpr.from_ast(ast[2]),
-            true_br=statement_create_cfg(ast[4], next_node, end_node),
-            false_br=statement_create_cfg(ast[6], next_node, end_node)
+            true_br=statement_create_cfg(ast[4], next_node, end_node, loop_start, loop_end),
+            false_br=statement_create_cfg(ast[6], next_node, end_node, loop_start, loop_end)
             if len(ast.children) == 7
             else next_node,
         )
@@ -161,19 +162,27 @@ def statement_create_cfg(
         statements = ast[1].children
         last = next_node
         for s in reversed(statements):
-            last = statement_create_cfg(s, last, end_node)
+            last = statement_create_cfg(s, last, end_node, loop_start, loop_end)
         return last
     elif ast.type == AstType.jump_statement:
-        # TODO: handle goto, continue, break
-        assert ast[0].type == AstType.RETURN
-        if len(ast.children) == 3:
-            return AssignmentNode(
-                expression=Expr.from_ast(ast[1]),
-                var=VarExpr("ret"),
-                next_node=end_node,
-            )
+        # TODO: handle goto
+        if ast[0].type == AstType.BREAK:
+            assert loop_end is not None
+            return loop_end
+        elif ast[0].type == AstType.CONTINUE:
+            assert loop_start is not None
+            return loop_start
+        elif ast[0].type == AstType.RETURN:
+            if len(ast.children) == 3:
+                return AssignmentNode(
+                    expression=Expr.from_ast(ast[1]),
+                    var=VarExpr("ret"),
+                    next_node=end_node,
+                )
+            else:
+                return end_node
         else:
-            return end_node
+            assert False
     elif ast.type == AstType.declaration:
         # TODO: what about "int x, y;"
         if ast[1].type != AstType.init_declarator:
@@ -201,17 +210,22 @@ def statement_create_cfg(
             # FIXME
             return next_node
 
-        assignment = ast[0]
-        value = Expr.from_ast(assignment[2])
-        var = assignment[0]
+        value = Expr.from_ast(ast[0][2])
+        operator = ast[0][1].text
+        assert operator is not None
+        left = Expr.from_ast(ast[0][0])
 
-        # TODO: handle other assignment operators: *= /= %= += -= >>= <<= &= |= ^=
+        # TODO? handle chained assignments?
 
-        if var.type != AstType.IDENTIFIER:
-            # TODO: what about "(x) = 5"
-            left = Expr.from_ast(var)
-            assert isinstance(left, ArrayItemExpr)
-            # TODO: what about 2d+ arrays?
+        # handle other assignment operators: *= /= %= += -= >>= <<= &= |= ^=
+        if operator != "=":
+            operator = operator[:-1]
+            value = BinExpr(operator=operator, lhs=left, rhs=value)
+
+        if isinstance(left, VarExpr):
+            return AssignmentNode(expression=value, var=left, next_node=next_node)
+        elif isinstance(left, ArrayItemExpr):
+            # TODO? what about 2d+ arrays?
             assert isinstance(left.array, VarExpr)
             return AssignmentNode(
                 var=left.array,
@@ -220,17 +234,28 @@ def statement_create_cfg(
                 ),
                 next_node=next_node,
             )
+        else:
+            assert False
 
-        var = var.text
-        assert var is not None
-
-        return AssignmentNode(expression=value, var=VarExpr(var), next_node=next_node)
     elif ast.type == AstType.iteration_statement:
-        # TODO: handle for, do-while
-        assert ast[0].type == AstType.WHILE
-        while_node = CondNode(BoolExpr.from_ast(ast[2]), None, next_node)
-        while_node.true_br = statement_create_cfg(ast[4], while_node, end_node)
-        return while_node
+        if ast[0].type == AstType.WHILE:
+            while_node = CondNode(BoolExpr.from_ast(ast[2]), None, next_node)
+            while_node.true_br = statement_create_cfg(ast[4], while_node, end_node, loop_start=while_node, loop_end=next_node)
+            return while_node
+        elif ast[0].type == AstType.DO:
+            cond = CondNode(BoolExpr.from_ast(ast[4]), None, next_node)
+            cond.true_br = statement_create_cfg(ast[1], cond, end_node, loop_start=cond, loop_end=next_node)
+            return cond.true_br
+        elif ast[0].type == AstType.FOR:
+            # TODO: handle other cases e.g. `for(;;);`
+            # for (decl; cond; inc) body
+            cond = CondNode(BoolExpr.from_ast(ast[3][0]), None, next_node)
+            decl = statement_create_cfg(ast[2], cond, end_node, None, None)
+            inc = statement_create_cfg(AstNode(None, AstType.expression_statement, ast[4].range, [ast[4]]), cond, end_node, None, None)
+            cond.true_br = statement_create_cfg(ast[6], inc, end_node, loop_start=cond, loop_end=next_node)
+            return decl
+        else:
+            assert False
     else:
         assert False
 
@@ -242,5 +267,5 @@ def create_cfg(ast: AstNode, assertion: Optional[Prop]) -> CfgNode:
     assert body.type == AstType.compound_statement
 
     end_node = EndNode(assertion)
-    return StartNode(statement_create_cfg(body, end_node, end_node))
+    return StartNode(statement_create_cfg(body, end_node, end_node, None, None))
 

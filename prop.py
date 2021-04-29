@@ -32,7 +32,6 @@ class Prop:
         elif ast.type == AstType.primary_expression:
             return Prop.from_ast(ast[1])
         else:
-            # TODO:
             raise NotImplementedError
 
     @staticmethod
