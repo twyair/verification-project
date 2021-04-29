@@ -80,12 +80,16 @@ class CfgNode:
 
 @dataclass
 class StartNode(CfgNode):
+    requires: Optional[Prop]
     next_node: CfgNode
 
     def generate_paths(
         self, path: BasicPath, visited: FrozenSet[int]
     ) -> Iterator[BasicPath]:
-        yield from self.next_node.generate_paths(path, visited)
+        yield from self.next_node.generate_paths(
+            path if self.requires is None else path.assert_start(self.requires),
+            visited,
+        )
 
 
 @dataclass
@@ -144,7 +148,11 @@ class AssertNode(CfgNode):
 
 
 def statement_create_cfg(
-    ast: AstNode, next_node: CfgNode, end_node: EndNode, loop_start: Optional[CfgNode], loop_end: Optional[CfgNode]
+    ast: AstNode,
+    next_node: CfgNode,
+    end_node: EndNode,
+    loop_start: Optional[CfgNode],
+    loop_end: Optional[CfgNode],
 ) -> CfgNode:
     if ast.type == AstType.semicolon:
         return next_node
@@ -153,8 +161,12 @@ def statement_create_cfg(
         assert ast[0].type == AstType.IF
         return CondNode(
             condition=BoolExpr.from_ast(ast[2]),
-            true_br=statement_create_cfg(ast[4], next_node, end_node, loop_start, loop_end),
-            false_br=statement_create_cfg(ast[6], next_node, end_node, loop_start, loop_end)
+            true_br=statement_create_cfg(
+                ast[4], next_node, end_node, loop_start, loop_end
+            ),
+            false_br=statement_create_cfg(
+                ast[6], next_node, end_node, loop_start, loop_end
+            )
             if len(ast.children) == 7
             else next_node,
         )
@@ -204,6 +216,7 @@ def statement_create_cfg(
                     assertion=Prop.from_ast(ast[0][2]), next_node=next_node
                 )
             else:
+                assert ast[0][0].text in ("ensures", "requires")
                 return next_node
 
         if ast[0].type != AstType.assignment_expression:
@@ -240,19 +253,31 @@ def statement_create_cfg(
     elif ast.type == AstType.iteration_statement:
         if ast[0].type == AstType.WHILE:
             while_node = CondNode(BoolExpr.from_ast(ast[2]), None, next_node)
-            while_node.true_br = statement_create_cfg(ast[4], while_node, end_node, loop_start=while_node, loop_end=next_node)
+            while_node.true_br = statement_create_cfg(
+                ast[4], while_node, end_node, loop_start=while_node, loop_end=next_node
+            )
             return while_node
         elif ast[0].type == AstType.DO:
             cond = CondNode(BoolExpr.from_ast(ast[4]), None, next_node)
-            cond.true_br = statement_create_cfg(ast[1], cond, end_node, loop_start=cond, loop_end=next_node)
+            cond.true_br = statement_create_cfg(
+                ast[1], cond, end_node, loop_start=cond, loop_end=next_node
+            )
             return cond.true_br
         elif ast[0].type == AstType.FOR:
             # TODO: handle other cases e.g. `for(;;);`
             # for (decl; cond; inc) body
             cond = CondNode(BoolExpr.from_ast(ast[3][0]), None, next_node)
             decl = statement_create_cfg(ast[2], cond, end_node, None, None)
-            inc = statement_create_cfg(AstNode(None, AstType.expression_statement, ast[4].range, [ast[4]]), cond, end_node, None, None)
-            cond.true_br = statement_create_cfg(ast[6], inc, end_node, loop_start=cond, loop_end=next_node)
+            inc = statement_create_cfg(
+                AstNode(None, AstType.expression_statement, ast[4].range, [ast[4]]),
+                cond,
+                end_node,
+                None,
+                None,
+            )
+            cond.true_br = statement_create_cfg(
+                ast[6], inc, end_node, loop_start=cond, loop_end=next_node
+            )
             return decl
         else:
             assert False
@@ -260,12 +285,16 @@ def statement_create_cfg(
         assert False
 
 
-def create_cfg(ast: AstNode, assertion: Optional[Prop]) -> CfgNode:
+def create_cfg(
+    ast: AstNode, requires: Optional[Prop], ensures: Optional[Prop]
+) -> CfgNode:
     assert ast.type == AstType.function_definition
 
     body = ast[-1]
     assert body.type == AstType.compound_statement
 
-    end_node = EndNode(assertion)
-    return StartNode(statement_create_cfg(body, end_node, end_node, None, None))
+    end_node = EndNode(ensures)
+    return StartNode(
+        requires, statement_create_cfg(body, end_node, end_node, None, None)
+    )
 

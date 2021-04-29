@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import json
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from functools import reduce
 
 from cast import AstNode, parse, AstType
@@ -21,7 +21,7 @@ def get_first_child(node: AstNode, pred) -> AstNode:
     return next(c for c in node.children if pred(c))
 
 
-def find_ensures(fn: AstNode) -> Optional[AstNode]:
+def find_ensures(fn: AstNode, name: str) -> Optional[AstNode]:
     statements = fn[-1][1].children
     for s in statements:
         if (
@@ -29,7 +29,7 @@ def find_ensures(fn: AstNode) -> Optional[AstNode]:
             and s[0].type == AstType.postfix_expression
             and s[0][1].type == AstType.paren_left
             and s[0][0].type == AstType.IDENTIFIER
-            and s[0][0].text == "ensures"
+            and s[0][0].text == name
         ):
             return s[0][2]
     return None
@@ -66,10 +66,13 @@ class Function:
             lambda c: c.type == AstType.IDENTIFIER,
         ).text
         assert name is not None
-        ensures = find_ensures(ast)
+        requires = find_ensures(ast, "requires")
+        if requires is not None:
+            requires = Prop.from_ast(requires)
+        ensures = find_ensures(ast, "ensures")
         if ensures is not None:
             ensures = Prop.from_ast(ensures)
-        return Function(cfg=create_cfg(ast, ensures), name=name)
+        return Function(cfg=create_cfg(ast, requires, ensures), name=name)
 
     def get_proof_rule(self) -> Prop:
         rule = reduce(
