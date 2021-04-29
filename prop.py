@@ -36,16 +36,19 @@ class Prop:
                 ast[1].type == AstType.paren_left
                 and ast[0].type == AstType.IDENTIFIER
             )
-            if ast[0].text == "forall":
+            assert ast[0].text is not None
+            if ast[0].text in ("forall", "exists"):
                 args = ast[2]
                 var = args[0][0].text
                 domain = args[0][2]
-                # FIXME: currently it assumes that the domain is like `range(_,_)`
-                start = Expr.from_ast(domain[2][0])
-                end = Expr.from_ast(domain[2][2])
+                if domain.type == AstType.IDENTIFIER:
+                    domain = domain.text
+                    assert domain is not None
+                else:
+                    domain = (Expr.from_ast(domain[2][0]), Expr.from_ast(domain[2][2]))
                 assert var is not None
-                return ForAll(
-                    var=var, domain=(start, end), prop=Prop.from_ast(args[2]),
+                return {"forall": ForAll, "exists": Exists}[ast[0].text](
+                    var=var, domain=domain, prop=Prop.from_ast(args[2]),
                 )
             else:
                 raise NotImplementedError
