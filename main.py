@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from expr import NumericExpr
 import json
 from typing import Dict, Optional, Tuple
 from functools import reduce
@@ -35,7 +36,7 @@ def find_ensures(fn: AstNode, name: str) -> Optional[AstNode]:
     return None
 
 
-PATH = "../Teaching.Verification.Project/benchmarks/c/json/{}.ast.json"
+PATH = "benchmarks/{}.json"
 
 
 def get_functions(filename: str) -> Dict[str, "Function"]:
@@ -84,7 +85,7 @@ class Function:
         )
         free_vars = rule.free_vars(frozenset(["ret",]))
         # FIXME: set the domain of `ForAll`
-        return reduce(lambda acc, x: ForAll(x, None, acc), free_vars, rule)
+        return reduce(lambda acc, x: ForAll(x, "int", acc), free_vars, rule)
 
     def get_proof_rule_as_string(self) -> str:
         return str(self.get_proof_rule())

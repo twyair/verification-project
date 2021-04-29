@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, FrozenSet, Set
+from typing import Dict, FrozenSet, Set, Tuple, Union
 from expr import BinBoolExpr, BoolExpr, RelExpr, Expr
 from cast import AstNode, AstType
 
@@ -31,6 +31,24 @@ class Prop:
             return Not(Prop.from_ast(ast[1]))
         elif ast.type == AstType.primary_expression:
             return Prop.from_ast(ast[1])
+        elif ast.type == AstType.postfix_expression:
+            assert (
+                ast[1].type == AstType.paren_left
+                and ast[0].type == AstType.IDENTIFIER
+            )
+            if ast[0].text == "forall":
+                args = ast[2]
+                var = args[0][0].text
+                domain = args[0][2]
+                # FIXME: currently it assumes that the domain is like `range(_,_)`
+                start = Expr.from_ast(domain[2][0])
+                end = Expr.from_ast(domain[2][2])
+                assert var is not None
+                return ForAll(
+                    var=var, domain=(start, end), prop=Prop.from_ast(args[2]),
+                )
+            else:
+                raise NotImplementedError
         else:
             raise NotImplementedError
 
@@ -79,7 +97,7 @@ class Then(Prop):
 @dataclass
 class ForAll(Prop):
     var: str
-    domain: str
+    domain: Union[Tuple[Expr, Expr], str]
     prop: Prop
 
     def assign(self, vars: Dict[str, Expr]) -> Prop:
@@ -89,10 +107,16 @@ class ForAll(Prop):
         return ForAll(var=self.var, domain=self.domain, prop=self.prop.assign(vars))
 
     def free_vars(self, bound_vars: FrozenSet[str]) -> Set[str]:
-        return self.prop.free_vars(bound_vars | {self.var})
+        bound_vars |= {self.var}
+        return self.prop.free_vars(bound_vars) | ((
+            (self.domain[0].vars() | self.domain[1].vars()) - bound_vars
+        ) if not isinstance(self.domain, str) else set())
 
     def __str__(self) -> str:
-        return f"∀{self.var}∈{self.domain}. {self.prop}"
+        return (f"∀{self.var}∈"
+            + (self.domain if isinstance(self.domain, str) else "({},{})".format(*self.domain))
+            + f".{self.prop}"
+        )
 
 
 @dataclass

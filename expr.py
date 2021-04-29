@@ -173,7 +173,7 @@ class Expr(GenericExpr):
 @dataclass(frozen=True)
 class VarExpr(Expr):
     var: str
-    # type_: str  # TODO?
+    # sort: str  # TODO?
 
     def assign(self, vars: Dict[str, Expr]) -> Expr:
         return vars.get(self.var, self)

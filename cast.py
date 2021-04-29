@@ -88,6 +88,7 @@ class AstType(enum.Enum):
     translation_unit = "translation_unit"  # V
     equality_expression = "equality_expression"  # V
     declaration_specifiers = "declaration_specifiers"
+    argument_expression_list = "argument_expression_list"
 
 
 @dataclass
