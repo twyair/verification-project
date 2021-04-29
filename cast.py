@@ -23,6 +23,7 @@ class AstType(enum.Enum):
     gt = ">"
     not_ = "!"
     neg = "~"
+    EXTERN = "EXTERN"
     CONSTANT = "CONSTANT"  # V
     ELSE = "ELSE"
     IDENTIFIER = "IDENTIFIER"  # V
@@ -86,6 +87,7 @@ class AstType(enum.Enum):
     selection_statement = "selection_statement"  # V
     translation_unit = "translation_unit"  # V
     equality_expression = "equality_expression"  # V
+    declaration_specifiers = "declaration_specifiers"
 
 
 @dataclass
