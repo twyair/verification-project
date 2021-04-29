@@ -1,28 +1,79 @@
-from typing import Dict, Iterator, List, Tuple, Union, cast
+from functools import reduce
+from typing import Dict, FrozenSet, Iterator, List, Optional
 from cast import AstNode, AstType
 from dataclasses import dataclass
+import dataclasses
 from expr import (
     ArrayItemExpr,
     BoolExpr,
-    BinBoolExpr,
     ChangeArrayExpr,
-    NotBoolExpr,
     Expr,
-    BinExpr,
-    NumericExpr,
-    UnaryExpr,
     VarExpr,
-    RelExpr,
 )
+from prop import And, Not, Prop, Then
 
 
-R = List[BoolExpr]
+R = List[Prop]
 T = Dict[str, Expr]
 
 
 @dataclass
+class BasicPath:
+    reachability: R
+    transformation: T
+    assertion_start: Optional[Prop]
+    assertion_end: Optional[Prop]
+
+    @staticmethod
+    def empty() -> "BasicPath":
+        return BasicPath([], {}, None, None)
+
+    def copy(self) -> "BasicPath":
+        return BasicPath(
+            self.reachability.copy(),
+            self.transformation.copy(),
+            self.assertion_start,
+            self.assertion_end,
+        )
+
+    def condition(self, cond: Prop) -> "BasicPath":
+        cp = self.copy()
+        cp.reachability.append(cond.assign(self.transformation))
+        return cp
+
+    def transform(self, var: str, expr: Expr) -> "BasicPath":
+        cp = self.copy()
+        cp.transformation[var] = expr.assign(self.transformation)
+        return cp
+
+    def assert_start(self, prop: Prop) -> "BasicPath":
+        return dataclasses.replace(self, assertion_start=prop)
+
+    def assert_end(self, prop: Prop) -> "BasicPath":
+        return dataclasses.replace(self, assertion_end=prop.assign(self.transformation))
+
+    def get_proof_rule(self) -> Prop:
+        assert self.assertion_end is not None
+        # FIXME: handle the case when `reachability` is empty
+        if self.assertion_start is not None:
+            return Then(
+                reduce(
+                    lambda acc, x: And(acc, x), self.reachability, self.assertion_start
+                ),
+                self.assertion_end,
+            )
+        else:
+            return Then(
+                reduce(lambda acc, x: And(acc, x), self.reachability),
+                self.assertion_end,
+            )
+
+
+@dataclass
 class CfgNode:
-    def generate_rt(self, r: R, t: T) -> Iterator[Tuple[R, T]]:
+    def generate_paths(
+        self, path: BasicPath, visited: FrozenSet[int]
+    ) -> Iterator[BasicPath]:
         raise NotImplementedError
 
 
@@ -30,14 +81,21 @@ class CfgNode:
 class StartNode(CfgNode):
     next_node: CfgNode
 
-    def generate_rt(self, r: R, t: T) -> Iterator[Tuple[R, T]]:
-        yield from self.next_node.generate_rt(r, t)
+    def generate_paths(
+        self, path: BasicPath, visited: FrozenSet[int]
+    ) -> Iterator[BasicPath]:
+        yield from self.next_node.generate_paths(path, visited)
 
 
 @dataclass
 class EndNode(CfgNode):
-    def generate_rt(self, r: R, t: T) -> Iterator[Tuple[R, T]]:
-        yield (r, t)
+    assertion: Optional[Prop]
+
+    def generate_paths(
+        self, path: BasicPath, visited: FrozenSet[int]
+    ) -> Iterator[BasicPath]:
+        if self.assertion is not None:
+            yield path.assert_end(self.assertion)
 
 
 @dataclass
@@ -46,12 +104,12 @@ class CondNode(CfgNode):
     true_br: CfgNode
     false_br: CfgNode
 
-    def generate_rt(self, r: R, t: T) -> Iterator[Tuple[R, T]]:
-        condition = self.condition.assign(t)
-        yield from self.true_br.generate_rt(r + [condition], t)
-        yield from self.false_br.generate_rt(
-            r + [cast(BoolExpr, NotBoolExpr(condition))], t
-        )
+    def generate_paths(
+        self, path: BasicPath, visited: FrozenSet[int]
+    ) -> Iterator[BasicPath]:
+        condition = Prop.from_expr(self.condition)
+        yield from self.true_br.generate_paths(path.condition(condition), visited)
+        yield from self.false_br.generate_paths(path.condition(Not(condition)), visited)
 
 
 @dataclass
@@ -60,73 +118,42 @@ class AssignmentNode(CfgNode):
     var: VarExpr
     next_node: CfgNode
 
-    def generate_rt(self, r: R, t: T) -> Iterator[Tuple[R, T]]:
-        t_next = t.copy()
-        t_next[self.var.var] = self.expression.assign(t)
-        yield from self.next_node.generate_rt(r, t_next)
-
-
-def make_generic_expr(ast: AstNode) -> Union[Expr, BoolExpr]:
-    if ast.type in (AstType.relational_expression, AstType.equality_expression):
-        lhs, op, rhs = ast.children
-        assert op.text is not None
-        return RelExpr(
-            operator=op.text,
-            lhs=make_expr(lhs),
-            rhs=make_expr(rhs),
+    def generate_paths(
+        self, path: BasicPath, visited: FrozenSet[int]
+    ) -> Iterator[BasicPath]:
+        yield from self.next_node.generate_paths(
+            path.transform(self.var.var, self.expression), visited
         )
-    elif ast.type == AstType.IDENTIFIER:
-        assert ast.text is not None
-        return VarExpr(var=ast.text)
-    elif ast.type in (AstType.logical_and_expression, AstType.logical_or_expression):
-        operator = ast[1].text
-        assert operator is not None
-        return BinBoolExpr(
-            operator=operator,
-            lhs=make_bool_expr(ast[0]),
-            rhs=make_bool_expr(ast[2]),
+
+
+@dataclass
+class AssertNode(CfgNode):
+    assertion: Prop
+    next_node: CfgNode
+
+    def generate_paths(
+        self, path: BasicPath, visited: FrozenSet[int]
+    ) -> Iterator[BasicPath]:
+        yield path.assert_end(self.assertion)
+        if id(self) in visited:
+            return
+        yield from self.next_node.generate_paths(
+            BasicPath.empty().assert_start(self.assertion), visited | {id(self)}
         )
-    elif ast.type == AstType.primary_expression:
-        return make_generic_expr(ast[1])
-    elif ast.type == AstType.postfix_expression:
-        assert ast[1].type == AstType.bracket_left
-        return ArrayItemExpr(
-            array=make_expr(ast[0]), index=make_expr(ast[2])
-        )
-    elif ast.type == AstType.CONSTANT:
-        assert ast.text is not None
-        return NumericExpr(int(ast.text))
-    elif ast.type == AstType.additive_expression:
-        return BinExpr(
-            operator="+",
-            lhs=make_expr(ast[0]),
-            rhs=make_expr(ast[2])
-        )
-    else:
-        assert False, f"unknown type {ast.type.value}"
 
 
-def make_expr(ast: AstNode) -> Expr:
-    expr = make_generic_expr(ast)
-    assert isinstance(expr, Expr)
-    return expr
-
-
-def make_bool_expr(ast: AstNode) -> BoolExpr:
-    expr = make_generic_expr(ast)
-    assert isinstance(expr, BoolExpr)
-    return expr
-
-
-def stmnt_create_cfg(ast: AstNode, next_node: CfgNode) -> CfgNode:
+def statement_create_cfg(
+    ast: AstNode, next_node: CfgNode, end_node: EndNode
+) -> CfgNode:
     if ast.type == AstType.semicolon:
         return next_node
     elif ast.type == AstType.selection_statement:
+        # TODO: handle switch
         assert ast[0].type == AstType.IF
         return CondNode(
-            condition=make_bool_expr(ast[2]),
-            true_br=stmnt_create_cfg(ast[4], next_node),
-            false_br=stmnt_create_cfg(ast[6], next_node)
+            condition=BoolExpr.from_ast(ast[2]),
+            true_br=statement_create_cfg(ast[4], next_node, end_node),
+            false_br=statement_create_cfg(ast[6], next_node, end_node)
             if len(ast.children) == 7
             else next_node,
         )
@@ -134,42 +161,62 @@ def stmnt_create_cfg(ast: AstNode, next_node: CfgNode) -> CfgNode:
         statements = ast[1].children
         last = next_node
         for s in reversed(statements):
-            last = stmnt_create_cfg(s, last)
+            last = statement_create_cfg(s, last, end_node)
         return last
     elif ast.type == AstType.jump_statement:
+        # TODO: handle goto, continue, break
         assert ast[0].type == AstType.RETURN
         if len(ast.children) == 3:
             return AssignmentNode(
-                expression=make_expr(ast[1]),
+                expression=Expr.from_ast(ast[1]),
                 var=VarExpr("ret"),
-                next_node=EndNode(),
+                next_node=end_node,
             )
         else:
-            return EndNode()
+            return end_node
     elif ast.type == AstType.declaration:
         # TODO: what about "int x, y;"
         if ast[1].type != AstType.init_declarator:
             return next_node
         var = ast[1][0].text
         assert var is not None
-        return AssignmentNode(expression=make_expr(ast[1][2]), var=VarExpr(var), next_node=next_node)
+        return AssignmentNode(
+            expression=Expr.from_ast(ast[1][2]), var=VarExpr(var), next_node=next_node
+        )
     elif ast.type == AstType.expression_statement:
-        assignment = ast[0]
-        if assignment.type != AstType.assignment_expression:
-            return next_node
-        value = make_expr(assignment[2])
+        # TODO: handle ++i, --i, i++, i--
+        if ast[0].type == AstType.postfix_expression:
+            assert (
+                ast[0][1].type == AstType.paren_left
+                and ast[0][0].type == AstType.IDENTIFIER
+            )
+            if ast[0][0].text == "assert":
+                return AssertNode(
+                    assertion=Prop.from_ast(ast[0][2]), next_node=next_node
+                )
+            else:
+                return next_node
 
+        if ast[0].type != AstType.assignment_expression:
+            # FIXME
+            return next_node
+
+        assignment = ast[0]
+        value = Expr.from_ast(assignment[2])
         var = assignment[0]
+
+        # TODO: handle other assignment operators: *= /= %= += -= >>= <<= &= |= ^=
+
         if var.type != AstType.IDENTIFIER:
             # TODO: what about "(x) = 5"
-            rvalue = make_expr(var)
-            assert isinstance(rvalue, ArrayItemExpr)
+            left = Expr.from_ast(var)
+            assert isinstance(left, ArrayItemExpr)
             # TODO: what about 2d+ arrays?
-            assert isinstance(rvalue.array, VarExpr)
+            assert isinstance(left.array, VarExpr)
             return AssignmentNode(
-                var=rvalue.array,
+                var=left.array,
                 expression=ChangeArrayExpr(
-                    array=rvalue.array, index=rvalue.index, value=value
+                    array=left.array, index=left.index, value=value
                 ),
                 next_node=next_node,
             )
@@ -178,15 +225,22 @@ def stmnt_create_cfg(ast: AstNode, next_node: CfgNode) -> CfgNode:
         assert var is not None
 
         return AssignmentNode(expression=value, var=VarExpr(var), next_node=next_node)
+    elif ast.type == AstType.iteration_statement:
+        # TODO: handle for, do-while
+        assert ast[0].type == AstType.WHILE
+        while_node = CondNode(BoolExpr.from_ast(ast[2]), None, next_node)
+        while_node.true_br = statement_create_cfg(ast[4], while_node, end_node)
+        return while_node
     else:
         assert False
 
 
-def create_cfg(ast: AstNode) -> CfgNode:
+def create_cfg(ast: AstNode, assertion: Optional[Prop]) -> CfgNode:
     assert ast.type == AstType.function_definition
 
     body = ast[-1]
     assert body.type == AstType.compound_statement
 
-    return StartNode(stmnt_create_cfg(body, EndNode()))
+    end_node = EndNode(assertion)
+    return StartNode(statement_create_cfg(body, end_node, end_node))
 

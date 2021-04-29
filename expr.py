@@ -1,11 +1,86 @@
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Set
+from cast import AstType, AstNode
 
 
 @dataclass(frozen=True)
-class BoolExpr:
+class GenericExpr:
+    def assign(self, vars: Dict[str, "Expr"]) -> "GenericExpr":
+        raise NotImplementedError
+
+    def vars(self) -> Set[str]:
+        raise NotImplementedError
+
+    def __str__(self) -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    def from_ast(ast: AstNode) -> "GenericExpr":
+        if ast.type in (AstType.relational_expression, AstType.equality_expression):
+            lhs, op, rhs = ast.children
+            assert op.text is not None
+            return RelExpr(
+                operator=op.text, lhs=Expr.from_ast(lhs), rhs=Expr.from_ast(rhs),
+            )
+        elif ast.type == AstType.IDENTIFIER:
+            assert ast.text is not None
+            return VarExpr(var=ast.text)
+        elif ast.type in (
+            AstType.logical_and_expression,
+            AstType.logical_or_expression,
+        ):
+            operator = ast[1].text
+            assert operator is not None
+            return BinBoolExpr(
+                operator=operator,
+                lhs=BoolExpr.from_ast(ast[0]),
+                rhs=BoolExpr.from_ast(ast[2]),
+            )
+        elif ast.type == AstType.primary_expression:
+            return GenericExpr.from_ast(ast[1])
+        elif ast.type == AstType.postfix_expression:
+            assert ast[1].type == AstType.bracket_left
+            return ArrayItemExpr(
+                array=Expr.from_ast(ast[0]), index=Expr.from_ast(ast[2])
+            )
+        elif ast.type == AstType.CONSTANT:
+            assert ast.text is not None
+            return NumericExpr(int(ast.text))
+        elif ast.type in (
+            AstType.additive_expression,
+            AstType.multiplicative_expression,
+            AstType.shift_expression,
+            AstType.and_expression,
+            AstType.exclusive_or_expression,
+            AstType.inclusive_or_expression,
+        ):
+            assert ast[1].text is not None
+            return BinExpr(
+                operator=ast[1].text,
+                lhs=Expr.from_ast(ast[0]),
+                rhs=Expr.from_ast(ast[2]),
+            )
+        elif ast.type == AstType.unary_expression:
+            op = ast[0].text
+            assert op is not None
+            if op == "!":
+                return NotBoolExpr(BoolExpr.from_ast(ast[1]))
+            else:
+                return UnaryExpr(operator=op, operand=Expr.from_ast(ast[1]))
+        else:
+            assert False, f"unknown type {ast.type.value}"
+
+
+@dataclass(frozen=True)
+class BoolExpr(GenericExpr):
     def assign(self, vars: Dict[str, "Expr"]) -> "BoolExpr":
         raise NotImplementedError
+
+    @staticmethod
+    def from_ast(ast: AstNode) -> "BoolExpr":
+        expr = GenericExpr.from_ast(ast)
+        assert isinstance(expr, BoolExpr)
+        return expr
 
 
 @dataclass(frozen=True)
@@ -19,8 +94,14 @@ class RelExpr(BoolExpr):
             operator=self.operator, lhs=self.lhs.assign(vars), rhs=self.rhs.assign(vars)
         )
 
+    def vars(self) -> Set[str]:
+        return self.lhs.vars() | self.rhs.vars()
+
     def __str__(self) -> str:
-        return f"{self.lhs} {self.operator} {self.rhs}"
+        op = {"<=": "≤", ">=": "≥", "==": "=", "!=": "≠"}.get(
+            self.operator, self.operator
+        )
+        return f"{self.lhs} {op} {self.rhs}"
 
 
 @dataclass(frozen=True)
@@ -34,9 +115,12 @@ class BinBoolExpr(BoolExpr):
             operator=self.operator, rhs=self.rhs.assign(vars), lhs=self.lhs.assign(vars)
         )
 
+    def vars(self) -> Set[str]:
+        return self.lhs.vars() | self.rhs.vars()
+
     def __str__(self) -> str:
         if self.operator == "&&":
-            return " && ".join(
+            return " ∧ ".join(
                 f"{p}"
                 if isinstance(p, BinBoolExpr)
                 and p.operator == "&&"
@@ -45,7 +129,7 @@ class BinBoolExpr(BoolExpr):
                 for p in [self.lhs, self.rhs]
             )
         elif self.operator == "||":
-            return " || ".join(
+            return " ∨ ".join(
                 f"{p}"
                 if isinstance(p, BinBoolExpr) or isinstance(p, NotBoolExpr)
                 else f"({p})"
@@ -62,14 +146,23 @@ class NotBoolExpr(BoolExpr):
     def assign(self, vars: Dict[str, "Expr"]) -> "NotBoolExpr":
         return NotBoolExpr(operand=self.operand.assign(vars))
 
+    def vars(self) -> Set[str]:
+        return self.operand.vars()
+
     def __str__(self) -> str:
-        return f"!({self.operand})"
+        return f"¬({self.operand})"
 
 
 @dataclass(frozen=True)
-class Expr:
+class Expr(GenericExpr):
     def assign(self, vars: Dict[str, "Expr"]) -> "Expr":
         raise NotImplementedError
+
+    @staticmethod
+    def from_ast(ast: AstNode) -> "Expr":
+        expr = GenericExpr.from_ast(ast)
+        assert isinstance(expr, Expr)
+        return expr
 
 
 @dataclass(frozen=True)
@@ -79,13 +172,16 @@ class VarExpr(Expr):
     def assign(self, vars: Dict[str, Expr]) -> Expr:
         return vars.get(self.var, self)
 
+    def vars(self) -> Set[str]:
+        return {self.var}
+
     def __str__(self) -> str:
         return self.var
 
 
 @dataclass(frozen=True)
 class BinExpr(Expr):
-    operator: str  # + - * / %
+    operator: str  # + - * / % << >> ^ & |
     lhs: Expr
     rhs: Expr
 
@@ -93,6 +189,9 @@ class BinExpr(Expr):
         return BinExpr(
             operator=self.operator, rhs=self.rhs.assign(vars), lhs=self.lhs.assign(vars)
         )
+
+    def vars(self) -> Set[str]:
+        return self.lhs.vars() | self.rhs.vars()
 
     def __str__(self) -> str:
         if self.operator in "*/%":
@@ -126,6 +225,9 @@ class UnaryExpr(Expr):
     def assign(self, vars: Dict[str, "Expr"]) -> "UnaryExpr":
         return UnaryExpr(operator=self.operator, operand=self.operand.assign(vars))
 
+    def vars(self) -> Set[str]:
+        return self.operand.vars()
+
     def __str__(self) -> str:
         return self.operator + (
             f"({self.operand})"
@@ -140,6 +242,9 @@ class NumericExpr(Expr):
 
     def assign(self, vars: Dict[str, "Expr"]) -> "NumericExpr":
         return self
+
+    def vars(self) -> Set[str]:
+        return set()
 
     def __str__(self) -> str:
         return f"{self.number}"
@@ -158,6 +263,9 @@ class ChangeArrayExpr(Expr):
             value=self.value.assign(vars),
         )
 
+    def vars(self) -> Set[str]:
+        return self.array.vars() | self.index.vars() | self.value.vars()
+
     def __str__(self) -> str:
         return f"Store({self.array}, {self.index}, {self.value})"
 
@@ -171,6 +279,9 @@ class ArrayItemExpr(Expr):
         return ArrayItemExpr(
             array=self.array.assign(vars), index=self.index.assign(vars)
         )
+
+    def vars(self) -> Set[str]:
+        return self.array.vars() | self.index.vars()
 
     def __str__(self) -> str:
         return f"{self.array}[{self.index}]"
