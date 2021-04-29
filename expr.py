@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from typing import Dict, Set
+from typing import Any, Callable, Dict, Set, ClassVar
+import operator
 from cast import AstType, AstNode
+import z3
 
 
 @dataclass(frozen=True)
@@ -12,6 +14,9 @@ class GenericExpr:
         raise NotImplementedError
 
     def __str__(self) -> str:
+        raise NotImplementedError
+
+    def as_z3(self, env: Dict[str, str]):
         raise NotImplementedError
 
     @staticmethod
@@ -168,6 +173,7 @@ class Expr(GenericExpr):
 @dataclass(frozen=True)
 class VarExpr(Expr):
     var: str
+    # type_: str  # TODO?
 
     def assign(self, vars: Dict[str, Expr]) -> Expr:
         return vars.get(self.var, self)
@@ -178,12 +184,33 @@ class VarExpr(Expr):
     def __str__(self) -> str:
         return self.var
 
+    def as_z3(self, env: Dict[str, str]):
+        if env[self.var] == "int":
+            return z3.Int(self.var)
+        elif env[self.var] == "array":
+            return z3.Array(self.var, z3.IntSort(), z3.IntSort())
+        else:
+            assert False, "unknown type"
+
 
 @dataclass(frozen=True)
 class BinExpr(Expr):
     operator: str  # + - * / % << >> ^ & |
     lhs: Expr
     rhs: Expr
+
+    SYM2OPERATOR: ClassVar[Dict[str, Callable[[int, int], int]]] = {
+        "+": operator.add,
+        "-": operator.sub,
+        "/": operator.floordiv,
+        "%": operator.mod,
+        "*": operator.mul,
+        # "^": operator.xor,
+        # "&": operator.and_,
+        # "|": operator.or_,
+        # ">>": operator.rshift,
+        # "<<": operator.lshift,
+    }
 
     def assign(self, vars: Dict[str, "Expr"]) -> "BinExpr":
         return BinExpr(
@@ -216,11 +243,22 @@ class BinExpr(Expr):
         else:
             assert False
 
+    def as_z3(self, env: Dict[str, str]):
+        return self.SYM2OPERATOR[self.operator](
+            self.lhs.as_z3(env), self.rhs.as_z3(env)
+        )
+
 
 @dataclass(frozen=True)
 class UnaryExpr(Expr):
-    operator: str  # + -
+    operator: str  # + - ~
     operand: Expr
+
+    SYM2OPERATOR: ClassVar[Dict[str, Callable[[int], int]]] = {
+        "+": operator.pos,
+        "-": operator.neg,
+        # "~": operator.inv,
+    }
 
     def assign(self, vars: Dict[str, "Expr"]) -> "UnaryExpr":
         return UnaryExpr(operator=self.operator, operand=self.operand.assign(vars))
@@ -235,6 +273,9 @@ class UnaryExpr(Expr):
             else f"{self.operand}"
         )
 
+    def as_z3(self, env: Dict[str, str]):
+        return self.SYM2OPERATOR[self.operator](self.operand.as_z3(env))
+
 
 @dataclass(frozen=True)
 class NumericExpr(Expr):
@@ -248,6 +289,9 @@ class NumericExpr(Expr):
 
     def __str__(self) -> str:
         return f"{self.number}"
+
+    def as_z3(self, env: Dict[str, str]):
+        return self.number
 
 
 @dataclass(frozen=True)
@@ -285,3 +329,6 @@ class ArrayItemExpr(Expr):
 
     def __str__(self) -> str:
         return f"{self.array}[{self.index}]"
+
+    def as_z3(self, env: Dict[str, str]):
+        return z3.Select(self.array.as_z3(env), self.index.as_z3(env))
