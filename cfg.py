@@ -15,14 +15,10 @@ from expr import (
 from prop import And, Not, Prop, Then
 
 
-R = List[Prop]
-T = Dict[str, Expr]
-
-
 @dataclass
 class BasicPath:
-    reachability: R
-    transformation: T
+    reachability: List[Prop]
+    transformation: Dict[str, Expr]
     assertion_start: Optional[Prop]
     assertion_end: Optional[Prop]
 

@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-
-from expr import Environment, VarExpr
 import json
 from typing import Dict, Optional
 from functools import reduce
 
+from pygraphviz.agraph import AGraph
+
+from expr import Environment, VarExpr
 from cast import AstNode, parse, AstType
 from cfg import (
     AssertNode,
@@ -74,7 +75,8 @@ class Function:
         ret_type = ast[0].text
         assert ret_type is not None
         env = Environment.empty()
-        env["ret"] = ret_type
+        if ret_type != "void":
+            env["ret"] = ret_type
         params = declarator[2]
         if params.type == AstType.parameter_list:
             for p in params.children:
@@ -117,16 +119,24 @@ class Function:
     def get_proof_rule_as_string(self) -> str:
         return str(self.get_proof_rule())
 
-    def draw_cfg(self):
-        from pygraphviz.agraph import AGraph
-
-        # import matplotlib.pyplot as plt
-        # import matplotlib.image as image
-
+    def draw_cfg(self, no_content=False):
         filepath = f"cfg-img/{self.name}.svg"
 
         graph = AGraph(directed=True)
         ids = set()
+
+        def add_node(id_: int, color: str, content: str, shape: str, label: str):
+            if no_content:
+                graph.add_node(id_, color=color, label=label, shape=shape, style="bold")
+            else:
+                graph.add_node(
+                    id_,
+                    color=color,
+                    label=content,
+                    shape=shape,
+                    style="bold",
+                    tooltip=label,
+                )
 
         def get_id(node: CfgNode) -> int:
             return id(node)
@@ -136,34 +146,63 @@ class Function:
             if id_ in ids:
                 return
             ids.add(id_)
-            if isinstance(node, (StartNode,)):
-                graph.add_node(id_, color="green", label="start")
+            if isinstance(node, StartNode):
+                add_node(
+                    id_,
+                    color="green",
+                    label="start",
+                    shape="ellipse",
+                    content=f"{node.requires}",
+                )
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
             elif isinstance(node, AssignmentNode):
-                graph.add_node(id_, color="blue", label="assign")
+                add_node(
+                    id_,
+                    color="blue",
+                    label="assign",
+                    shape="rectangle",
+                    content=f"{node.var.var} := {node.expression}",
+                )
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
             elif isinstance(node, CondNode):
-                graph.add_node(id_, color="red", label="condition")
+                add_node(
+                    id_,
+                    color="red",
+                    label="condition",
+                    shape="diamond",
+                    content=f"{node.condition}",
+                )
                 graph.add_edge(id_, get_id(node.true_br), label="T")
                 graph.add_edge(id_, get_id(node.false_br), label="F")
                 traverse(node.true_br)
                 traverse(node.false_br)
             elif isinstance(node, EndNode):
-                graph.add_node(id_, color="black", label="halt")
+                add_node(
+                    id_,
+                    color="black",
+                    label="halt",
+                    shape="doubleoctagon",
+                    content=f"{node.assertion}",
+                )
             elif isinstance(node, AssertNode):
-                graph.add_node(id_, color="purple", label="assert")
+                add_node(
+                    id_,
+                    color="purple",
+                    label="assert",
+                    shape="octagon",
+                    content=f"{node.assertion}",
+                )
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
             elif isinstance(node, DummyNode):
-                graph.add_node(id_, color="yellow", label="dummy")
+                add_node(
+                    id_, color="yellow", label="dummy", shape="star", content="???"
+                )
             else:
                 assert False
 
         traverse(self.cfg)
 
         graph.draw(path=filepath, prog="dot")
-
-        # plt.imshow(image.imread(filepath))
-        # plt.show()

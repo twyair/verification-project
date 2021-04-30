@@ -4,7 +4,7 @@
 #define assert(x)
 #endif
 
-int bubble_sort(int arr[], int size) {
+void bubble_sort(int arr[], int size) {
     requires(size > 0);
     ensures(forall(k, range(0, size - 1), arr[k] <= arr[k + 1]));
     for (int j = 0; j < size; j += 1) {
