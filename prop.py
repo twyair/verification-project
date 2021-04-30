@@ -56,6 +56,7 @@ class Prop:
                 env.open_scope()
                 ty = domain if isinstance(domain, str) else "int"
                 env[var] = ty
+                del env.vars[env.rename(var)]  # TODO: is there a better way to exclude quantified variables
                 prop = Prop.from_ast(args[2], env)
                 env.close_scope()
                 if quantifier == "forall":
@@ -90,7 +91,7 @@ class Prop:
     def __str__(self) -> str:
         raise NotImplementedError
 
-    def as_z3(self, env: Dict[str, str]):
+    def as_z3(self):
         raise NotImplementedError
 
 

@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from expr import Environment, NumericExpr, VarExpr
+
+from expr import Environment, VarExpr
 import json
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 from functools import reduce
 
 from cast import AstNode, parse, AstType
@@ -16,7 +17,7 @@ from cfg import (
     StartNode,
     create_cfg,
 )
-from prop import And, ForAll, Prop
+from prop import And, Prop, ForAll
 
 
 def get_first_child(node: AstNode, pred) -> AstNode:
@@ -102,88 +103,67 @@ class Function:
         return Function(cfg=cfg, name=fn_name, vars=env.vars)
 
     def get_proof_rule(self) -> Prop:
-        return reduce(
+        rule = reduce(
             lambda acc, x: And(acc, x),
             [
                 path.get_proof_rule()
                 for path in self.cfg.generate_paths(BasicPath.empty(), frozenset())
             ],
         )
-        # return reduce(lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), rule)
+        return reduce(
+            lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), rule
+        )
 
     def get_proof_rule_as_string(self) -> str:
         return str(self.get_proof_rule())
 
     def draw_cfg(self):
-        import networkx as nx
-        from networkx.drawing.nx_agraph import pygraphviz_layout
-        import matplotlib.pyplot as plt
+        from pygraphviz.agraph import AGraph
 
-        graph = nx.DiGraph()
-        id2node: Dict = {}
-        edge_labels = {}
-        node_colors = []
-        # node_colors = {}
+        # import matplotlib.pyplot as plt
+        # import matplotlib.image as image
+
+        filepath = f"cfg-img/{self.name}.svg"
+
+        graph = AGraph(directed=True)
+        ids = set()
 
         def get_id(node: CfgNode) -> int:
             return id(node)
 
         def traverse(node: CfgNode):
             id_ = get_id(node)
-            if id_ in id2node:
+            if id_ in ids:
                 return
-            id2node[id_] = node
+            ids.add(id_)
             if isinstance(node, (StartNode,)):
-                # node_colors[id_] = "green"
+                graph.add_node(id_, color="green", label="start")
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
             elif isinstance(node, AssignmentNode):
-                # node_colors[id_] = "blue"
+                graph.add_node(id_, color="blue", label="assign")
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
             elif isinstance(node, CondNode):
-                # node_colors[id_] = "red"
-                id_t, id_f = get_id(node.true_br), get_id(node.false_br)
-                edge_labels[(id_, id_t)] = "T"
-                edge_labels[(id_, id_f)] = "F"
-                graph.add_edge(id_, id_t)
-                graph.add_edge(id_, id_f)
+                graph.add_node(id_, color="red", label="condition")
+                graph.add_edge(id_, get_id(node.true_br), label="T")
+                graph.add_edge(id_, get_id(node.false_br), label="F")
                 traverse(node.true_br)
                 traverse(node.false_br)
             elif isinstance(node, EndNode):
-                pass
-                # node_colors[get_id(node)] = "black"
+                graph.add_node(id_, color="black", label="halt")
             elif isinstance(node, AssertNode):
+                graph.add_node(id_, color="purple", label="assert")
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
             elif isinstance(node, DummyNode):
-                pass  # FIXME
+                graph.add_node(id_, color="yellow", label="dummy")
             else:
                 assert False
 
         traverse(self.cfg)
 
-        for node_id in graph:
-            node = id2node[node_id]
-            if isinstance(node, AssignmentNode):
-                node_colors.append("blue")
-            elif isinstance(node, CondNode):
-                node_colors.append("red")
-            elif isinstance(node, StartNode):
-                node_colors.append("green")
-            elif isinstance(node, EndNode):
-                node_colors.append("black")
-            elif isinstance(node, AssertNode):
-                node_colors.append("purple")
-            elif isinstance(node, DummyNode):
-                node_colors.append("yellow")  # FIXME: remove
-            else:
-                assert False
+        graph.draw(path=filepath, prog="dot")
 
-        pos = pygraphviz_layout(graph, prog="dot", root=get_id(self.cfg))
-
-        nx.draw(
-            graph, pos, node_shape="s", node_color=node_colors, node_size=400, width=4,
-        )
-        nx.draw_networkx_edge_labels(graph, pos, edge_labels)
-        plt.show()
+        # plt.imshow(image.imread(filepath))
+        # plt.show()

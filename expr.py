@@ -58,7 +58,7 @@ class GenericExpr:
     def __str__(self) -> str:
         raise NotImplementedError
 
-    def as_z3(self, env: Dict[str, str]):
+    def as_z3(self):
         raise NotImplementedError
 
     @staticmethod
@@ -228,7 +228,7 @@ class VarExpr(Expr):
     def __str__(self) -> str:
         return self.var
 
-    def as_z3(self, env: Dict[str, str]):
+    def as_z3(self):
         # TODO: add more types
         if self.type_ == "int":
             return z3.Int(self.var)
@@ -288,9 +288,9 @@ class BinExpr(Expr):
         else:
             assert False
 
-    def as_z3(self, env: Dict[str, str]):
+    def as_z3(self):
         return self.SYM2OPERATOR[self.operator](
-            self.lhs.as_z3(env), self.rhs.as_z3(env)
+            self.lhs.as_z3(), self.rhs.as_z3()
         )
 
 
@@ -318,8 +318,8 @@ class UnaryExpr(Expr):
             else f"{self.operand}"
         )
 
-    def as_z3(self, env: Dict[str, str]):
-        return self.SYM2OPERATOR[self.operator](self.operand.as_z3(env))
+    def as_z3(self):
+        return self.SYM2OPERATOR[self.operator](self.operand.as_z3())
 
 
 @dataclass(frozen=True)
@@ -335,7 +335,7 @@ class NumericExpr(Expr):
     def __str__(self) -> str:
         return f"{self.number}"
 
-    def as_z3(self, env: Dict[str, str]):
+    def as_z3(self):
         return self.number
 
 
@@ -375,5 +375,5 @@ class ArrayItemExpr(Expr):
     def __str__(self) -> str:
         return f"{self.array}[{self.index}]"
 
-    def as_z3(self, env: Dict[str, str]):
-        return z3.Select(self.array.as_z3(env), self.index.as_z3(env))
+    def as_z3(self):
+        return z3.Select(self.array.as_z3(), self.index.as_z3())
