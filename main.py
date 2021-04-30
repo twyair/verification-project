@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from expr import NumericExpr
+from expr import Environment, NumericExpr, VarExpr
 import json
 from typing import Dict, Optional, Tuple
 from functools import reduce
@@ -11,6 +11,7 @@ from cfg import (
     BasicPath,
     CfgNode,
     CondNode,
+    DummyNode,
     EndNode,
     StartNode,
     create_cfg,
@@ -59,33 +60,56 @@ def get_functions(filename: str) -> Dict[str, "Function"]:
 class Function:
     name: str
     cfg: CfgNode
+    vars: Dict[str, str]
 
     @staticmethod
     def from_ast(ast: AstNode) -> "Function":
-        name = get_first_child(
-            get_first_child(ast, lambda c: c.type == AstType.direct_declarator),
-            lambda c: c.type == AstType.IDENTIFIER,
+        declarator = get_first_child(ast, lambda c: c.type == AstType.direct_declarator)
+        fn_name = get_first_child(
+            declarator, lambda c: c.type == AstType.IDENTIFIER,
         ).text
-        assert name is not None
+        assert fn_name is not None
+        assert ast.type == AstType.function_definition
+        ret_type = ast[0].text
+        assert ret_type is not None
+        env = Environment.empty()
+        env["ret"] = ret_type
+        params = declarator[2]
+        if params.type == AstType.parameter_list:
+            for p in params.children:
+                if p.type == AstType.parameter_declaration:
+                    ty = p[0].text
+                    assert ty is not None and ty in ("int",)  # TODO: add more types
+                    name = None
+                    if p[1].type == AstType.IDENTIFIER:
+                        name = p[1].text
+                    elif (
+                        p[1].type == AstType.direct_declarator
+                        and p[1][0].type == AstType.IDENTIFIER
+                        and p[1][1].text == "["
+                    ):
+                        name = p[1][0].text
+                        ty = "array-" + ty
+                    assert name is not None
+                    env[name] = ty
         requires = find_ensures(ast, "requires")
         if requires is not None:
-            requires = Prop.from_ast(requires)
+            requires = Prop.from_ast(requires, env)
         ensures = find_ensures(ast, "ensures")
         if ensures is not None:
-            ensures = Prop.from_ast(ensures)
-        return Function(cfg=create_cfg(ast, requires, ensures), name=name)
+            ensures = Prop.from_ast(ensures, env)
+        cfg = create_cfg(ast, requires, ensures, env)
+        return Function(cfg=cfg, name=fn_name, vars=env.vars)
 
     def get_proof_rule(self) -> Prop:
-        rule = reduce(
+        return reduce(
             lambda acc, x: And(acc, x),
             [
                 path.get_proof_rule()
                 for path in self.cfg.generate_paths(BasicPath.empty(), frozenset())
             ],
         )
-        free_vars = rule.free_vars(frozenset(["ret",]))
-        # FIXME: set the domain of `ForAll`
-        return reduce(lambda acc, x: ForAll(x, "int", acc), free_vars, rule)
+        # return reduce(lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), rule)
 
     def get_proof_rule_as_string(self) -> str:
         return str(self.get_proof_rule())
@@ -132,6 +156,8 @@ class Function:
             elif isinstance(node, AssertNode):
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
+            elif isinstance(node, DummyNode):
+                pass  # FIXME
             else:
                 assert False
 
@@ -149,12 +175,12 @@ class Function:
                 node_colors.append("black")
             elif isinstance(node, AssertNode):
                 node_colors.append("purple")
+            elif isinstance(node, DummyNode):
+                node_colors.append("yellow")  # FIXME: remove
             else:
                 assert False
 
-        pos = pygraphviz_layout(
-            graph, prog="dot", root=get_id(self.cfg)
-        )  # , args="-Granksep=2")
+        pos = pygraphviz_layout(graph, prog="dot", root=get_id(self.cfg))
 
         nx.draw(
             graph, pos, node_shape="s", node_color=node_colors, node_size=400, width=4,

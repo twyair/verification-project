@@ -1,8 +1,50 @@
+from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Set, ClassVar
+from typing import Callable, DefaultDict, Dict, List, Set, ClassVar
 import operator
 from cast import AstType, AstNode
 import z3
+
+
+@dataclass
+class Environment:
+    scopes: List[Dict[str, str]]
+    vars: Dict[str, str]
+    names_count: DefaultDict[str, int]
+    renamer: List[Dict[str, str]]
+
+    @staticmethod
+    def empty():
+        return Environment(
+            scopes=[{}], vars={}, names_count=defaultdict(lambda: 0), renamer=[{}],
+        )
+
+    def __getitem__(self, var: str) -> str:
+        for scope in reversed(self.scopes):
+            if var in scope:
+                return scope[var]
+        assert False, f"{var} is not in the environment"
+
+    def __setitem__(self, var: str, type_: str) -> None:
+        self.scopes[-1][var] = type_
+        if self.names_count[var] > 0:
+            self.renamer[-1][var] = f"{var}${self.names_count[var]}"
+        self.names_count[var] += 1
+        self.vars[self.rename(var)] = type_
+
+    def rename(self, var: str) -> str:
+        return self.renamer[-1].get(var, var)
+
+    def open_scope(self) -> None:
+        self.scopes.append({})
+        self.renamer.append({})
+
+    def close_scope(self) -> None:
+        self.scopes.pop()
+        self.renamer.pop()
+
+    def make_var_expr(self, var: str) -> "VarExpr":
+        return VarExpr(self.rename(var), self[var])
 
 
 @dataclass(frozen=True)
@@ -20,16 +62,18 @@ class GenericExpr:
         raise NotImplementedError
 
     @staticmethod
-    def from_ast(ast: AstNode) -> "GenericExpr":
+    def from_ast(ast: AstNode, env: Environment) -> "GenericExpr":
         if ast.type in (AstType.relational_expression, AstType.equality_expression):
             lhs, op, rhs = ast.children
             assert op.text is not None
             return RelExpr(
-                operator=op.text, lhs=Expr.from_ast(lhs), rhs=Expr.from_ast(rhs),
+                operator=op.text,
+                lhs=Expr.from_ast(lhs, env),
+                rhs=Expr.from_ast(rhs, env),
             )
         elif ast.type == AstType.IDENTIFIER:
             assert ast.text is not None
-            return VarExpr(var=ast.text)
+            return env.make_var_expr(ast.text)
         elif ast.type in (
             AstType.logical_and_expression,
             AstType.logical_or_expression,
@@ -38,15 +82,15 @@ class GenericExpr:
             assert operator is not None
             return BinBoolExpr(
                 operator=operator,
-                lhs=BoolExpr.from_ast(ast[0]),
-                rhs=BoolExpr.from_ast(ast[2]),
+                lhs=BoolExpr.from_ast(ast[0], env),
+                rhs=BoolExpr.from_ast(ast[2], env),
             )
         elif ast.type == AstType.primary_expression:
-            return GenericExpr.from_ast(ast[1])
+            return GenericExpr.from_ast(ast[1], env)
         elif ast.type == AstType.postfix_expression:
             assert ast[1].type == AstType.bracket_left
             return ArrayItemExpr(
-                array=Expr.from_ast(ast[0]), index=Expr.from_ast(ast[2])
+                array=Expr.from_ast(ast[0], env), index=Expr.from_ast(ast[2], env)
             )
         elif ast.type == AstType.CONSTANT:
             assert ast.text is not None
@@ -62,16 +106,16 @@ class GenericExpr:
             assert ast[1].text is not None
             return BinExpr(
                 operator=ast[1].text,
-                lhs=Expr.from_ast(ast[0]),
-                rhs=Expr.from_ast(ast[2]),
+                lhs=Expr.from_ast(ast[0], env),
+                rhs=Expr.from_ast(ast[2], env),
             )
         elif ast.type == AstType.unary_expression:
             op = ast[0].text
             assert op is not None
             if op == "!":
-                return NotBoolExpr(BoolExpr.from_ast(ast[1]))
+                return NotBoolExpr(BoolExpr.from_ast(ast[1], env))
             else:
-                return UnaryExpr(operator=op, operand=Expr.from_ast(ast[1]))
+                return UnaryExpr(operator=op, operand=Expr.from_ast(ast[1], env))
         else:
             assert False, f"unknown type {ast.type.value}"
 
@@ -82,8 +126,8 @@ class BoolExpr(GenericExpr):
         raise NotImplementedError
 
     @staticmethod
-    def from_ast(ast: AstNode) -> "BoolExpr":
-        expr = GenericExpr.from_ast(ast)
+    def from_ast(ast: AstNode, env: Environment) -> "BoolExpr":
+        expr = GenericExpr.from_ast(ast, env)
         assert isinstance(expr, BoolExpr)
         return expr
 
@@ -164,8 +208,8 @@ class Expr(GenericExpr):
         raise NotImplementedError
 
     @staticmethod
-    def from_ast(ast: AstNode) -> "Expr":
-        expr = GenericExpr.from_ast(ast)
+    def from_ast(ast: AstNode, env: Environment) -> "Expr":
+        expr = GenericExpr.from_ast(ast, env)
         assert isinstance(expr, Expr)
         return expr
 
@@ -173,7 +217,7 @@ class Expr(GenericExpr):
 @dataclass(frozen=True)
 class VarExpr(Expr):
     var: str
-    # sort: str  # TODO?
+    type_: str
 
     def assign(self, vars: Dict[str, Expr]) -> Expr:
         return vars.get(self.var, self)
@@ -185,12 +229,13 @@ class VarExpr(Expr):
         return self.var
 
     def as_z3(self, env: Dict[str, str]):
-        if env[self.var] == "int":
+        # TODO: add more types
+        if self.type_ == "int":
             return z3.Int(self.var)
-        elif env[self.var] == "array":
+        elif self.type_ == "array-int":
             return z3.Array(self.var, z3.IntSort(), z3.IntSort())
         else:
-            assert False, "unknown type"
+            assert False, f"unknown type: {self.type_}"
 
 
 @dataclass(frozen=True)

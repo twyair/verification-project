@@ -1,5 +1,5 @@
 from functools import reduce
-from typing import Dict, FrozenSet, Iterator, List, Optional
+from typing import Dict, FrozenSet, Iterator, List, Optional, Set
 from cast import AstNode, AstType
 from dataclasses import dataclass
 import dataclasses
@@ -8,6 +8,7 @@ from expr import (
     BinExpr,
     BoolExpr,
     ChangeArrayExpr,
+    Environment,
     Expr,
     VarExpr,
 )
@@ -77,6 +78,20 @@ class CfgNode:
     ) -> Iterator[BasicPath]:
         raise NotImplementedError
 
+    def replace(self, dummy: "DummyNode", node: "CfgNode", visited: Set[int]):
+        raise NotImplementedError
+
+
+@dataclass
+class DummyNode(CfgNode):
+    """
+    used as a placeholder for when you can't provide a child node `y` when creating node `x` as `y` requires `x` to be created
+    see for example how CFGs are created for loops
+    """
+
+    def replace(self, dummy: "DummyNode", node: "CfgNode", visited: Set[int]):
+        return
+
 
 @dataclass
 class StartNode(CfgNode):
@@ -91,6 +106,13 @@ class StartNode(CfgNode):
             visited,
         )
 
+    def replace(self, dummy: DummyNode, node: CfgNode, visited: Set[int]):
+        if id(self) in visited:
+            return self
+        if dummy is self.next_node:
+            self.next_node = node
+        self.next_node.replace(dummy, node, visited)
+
 
 @dataclass
 class EndNode(CfgNode):
@@ -101,6 +123,9 @@ class EndNode(CfgNode):
     ) -> Iterator[BasicPath]:
         if self.assertion is not None:
             yield path.assert_end(self.assertion)
+
+    def replace(self, dummy: DummyNode, node: CfgNode, visited: Set[int]):
+        pass
 
 
 @dataclass
@@ -116,6 +141,16 @@ class CondNode(CfgNode):
         yield from self.true_br.generate_paths(path.condition(condition), visited)
         yield from self.false_br.generate_paths(path.condition(Not(condition)), visited)
 
+    def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
+        if id(self) in visited:
+            return self
+        if dummy is self.true_br:
+            self.true_br = node
+        self.true_br.replace(dummy, node, visited=visited | {id(self)})
+        if dummy is self.false_br:
+            self.false_br = node
+        self.false_br.replace(dummy, node, visited=visited | {id(self)})
+
 
 @dataclass
 class AssignmentNode(CfgNode):
@@ -129,6 +164,13 @@ class AssignmentNode(CfgNode):
         yield from self.next_node.generate_paths(
             path.transform(self.var.var, self.expression), visited
         )
+
+    def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
+        if id(self) in visited:
+            return self
+        if dummy is self.next_node:
+            self.next_node = node
+        self.next_node.replace(dummy, node, visited)
 
 
 @dataclass
@@ -146,6 +188,13 @@ class AssertNode(CfgNode):
             BasicPath.empty().assert_start(self.assertion), visited | {id(self)}
         )
 
+    def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
+        if id(self) in visited:
+            return self
+        if dummy is self.next_node:
+            self.next_node = node
+        self.next_node.replace(dummy, node, visited)
+
 
 def statement_create_cfg(
     ast: AstNode,
@@ -153,6 +202,7 @@ def statement_create_cfg(
     end_node: EndNode,
     loop_start: Optional[CfgNode],
     loop_end: Optional[CfgNode],
+    env: Environment,
 ) -> CfgNode:
     if ast.type == AstType.semicolon:
         return next_node
@@ -160,24 +210,35 @@ def statement_create_cfg(
         # TODO: handle switch
         assert ast[0].type == AstType.IF
         return CondNode(
-            condition=BoolExpr.from_ast(ast[2]),
+            condition=BoolExpr.from_ast(ast[2], env),
             true_br=statement_create_cfg(
-                ast[4], next_node, end_node, loop_start, loop_end
+                ast[4], next_node, end_node, loop_start, loop_end, env
             ),
             false_br=statement_create_cfg(
-                ast[6], next_node, end_node, loop_start, loop_end
+                ast[6], next_node, end_node, loop_start, loop_end, env
             )
             if len(ast.children) == 7
             else next_node,
         )
     elif ast.type == AstType.compound_statement:
-        statements = ast[1].children
-        last = next_node
-        for s in reversed(statements):
-            last = statement_create_cfg(s, last, end_node, loop_start, loop_end)
-        return last
+        env.open_scope()
+        statements: List[CfgNode] = []
+        dummies: List[DummyNode] = []
+        for s in ast[1].children:
+            dummy = DummyNode()
+            statement = statement_create_cfg(
+                s, dummy, end_node, loop_start, loop_end, env
+            )
+            if statement is not dummy:
+                dummies.append(dummy)
+                statements.append(statement)
+        statements.append(next_node)
+        for s, s_next, d in zip(statements, statements[1:], dummies):
+            s.replace(d, s_next, set())
+        env.close_scope()
+        return statements[0]
     elif ast.type == AstType.jump_statement:
-        # TODO: handle goto
+        # TODO? handle goto
         if ast[0].type == AstType.BREAK:
             assert loop_end is not None
             return loop_end
@@ -187,8 +248,8 @@ def statement_create_cfg(
         elif ast[0].type == AstType.RETURN:
             if len(ast.children) == 3:
                 return AssignmentNode(
-                    expression=Expr.from_ast(ast[1]),
-                    var=VarExpr("ret"),
+                    expression=Expr.from_ast(ast[1], env),
+                    var=VarExpr("ret", env["ret"]),
                     next_node=end_node,
                 )
             else:
@@ -199,10 +260,15 @@ def statement_create_cfg(
         # TODO: what about "int x, y;"
         if ast[1].type != AstType.init_declarator:
             return next_node
+        # TODO: what about array types?
+        type_ = ast[0].text
+        assert type_ is not None and type_ in ("int",)  # TODO: add more types
         var = ast[1][0].text
         assert var is not None
+        value = Expr.from_ast(ast[1][2], env)
+        env[var] = type_
         return AssignmentNode(
-            expression=Expr.from_ast(ast[1][2]), var=VarExpr(var), next_node=next_node
+            expression=value, var=env.make_var_expr(var), next_node=next_node
         )
     elif ast.type == AstType.expression_statement:
         # TODO: handle ++i, --i, i++, i--
@@ -213,7 +279,7 @@ def statement_create_cfg(
             )
             if ast[0][0].text == "assert":
                 return AssertNode(
-                    assertion=Prop.from_ast(ast[0][2]), next_node=next_node
+                    assertion=Prop.from_ast(ast[0][2], env), next_node=next_node
                 )
             else:
                 assert ast[0][0].text in ("ensures", "requires")
@@ -223,10 +289,10 @@ def statement_create_cfg(
             # FIXME
             return next_node
 
-        value = Expr.from_ast(ast[0][2])
+        value = Expr.from_ast(ast[0][2], env)
         operator = ast[0][1].text
         assert operator is not None
-        left = Expr.from_ast(ast[0][0])
+        left = Expr.from_ast(ast[0][0], env)
 
         # TODO? handle chained assignments?
 
@@ -249,35 +315,46 @@ def statement_create_cfg(
             )
         else:
             assert False
-
     elif ast.type == AstType.iteration_statement:
         if ast[0].type == AstType.WHILE:
-            while_node = CondNode(BoolExpr.from_ast(ast[2]), None, next_node)
+            while_node = CondNode(
+                BoolExpr.from_ast(ast[2], env), DummyNode(), next_node
+            )
             while_node.true_br = statement_create_cfg(
-                ast[4], while_node, end_node, loop_start=while_node, loop_end=next_node
+                ast[4],
+                while_node,
+                end_node,
+                loop_start=while_node,
+                loop_end=next_node,
+                env=env,
             )
             return while_node
         elif ast[0].type == AstType.DO:
-            cond = CondNode(BoolExpr.from_ast(ast[4]), None, next_node)
+            cond = CondNode(BoolExpr.from_ast(ast[4], env), DummyNode(), next_node)
             cond.true_br = statement_create_cfg(
-                ast[1], cond, end_node, loop_start=cond, loop_end=next_node
+                ast[1], cond, end_node, loop_start=cond, loop_end=next_node, env=env
             )
             return cond.true_br
         elif ast[0].type == AstType.FOR:
             # TODO: handle other cases e.g. `for(;;);`
             # for (decl; cond; inc) body
-            cond = CondNode(BoolExpr.from_ast(ast[3][0]), None, next_node)
-            decl = statement_create_cfg(ast[2], cond, end_node, None, None)
+            env.open_scope()
+            decl = statement_create_cfg(ast[2], DummyNode(), end_node, None, None, env)
+            cond = CondNode(BoolExpr.from_ast(ast[3][0], env), DummyNode(), next_node)
+            assert isinstance(decl, AssignmentNode)
+            decl.next_node = cond
             inc = statement_create_cfg(
                 AstNode(None, AstType.expression_statement, ast[4].range, [ast[4]]),
                 cond,
                 end_node,
                 None,
                 None,
+                env,
             )
             cond.true_br = statement_create_cfg(
-                ast[6], inc, end_node, loop_start=cond, loop_end=next_node
+                ast[6], inc, end_node, loop_start=cond, loop_end=next_node, env=env
             )
+            env.close_scope()
             return decl
         else:
             assert False
@@ -286,7 +363,7 @@ def statement_create_cfg(
 
 
 def create_cfg(
-    ast: AstNode, requires: Optional[Prop], ensures: Optional[Prop]
+    ast: AstNode, requires: Optional[Prop], ensures: Optional[Prop], env: Environment
 ) -> CfgNode:
     assert ast.type == AstType.function_definition
 
@@ -295,6 +372,6 @@ def create_cfg(
 
     end_node = EndNode(ensures)
     return StartNode(
-        requires, statement_create_cfg(body, end_node, end_node, None, None)
+        requires, statement_create_cfg(body, end_node, end_node, None, None, env)
     )
 

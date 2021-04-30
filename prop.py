@@ -1,43 +1,46 @@
 from dataclasses import dataclass
 from typing import Dict, FrozenSet, Set, Tuple, Union
-from expr import BinBoolExpr, BoolExpr, RelExpr, Expr
+from expr import BinBoolExpr, BoolExpr, Environment, RelExpr, Expr, VarExpr
 from cast import AstNode, AstType
+import z3
 
 
 @dataclass
 class Prop:
     @staticmethod
-    def from_ast(ast: AstNode) -> "Prop":
+    def from_ast(ast: AstNode, env: Environment) -> "Prop":
         if ast.type in (AstType.relational_expression, AstType.equality_expression):
             lhs, op, rhs = ast.children
             assert op.text is not None
             return RelProp(
                 RelExpr(
-                    operator=op.text, lhs=Expr.from_ast(lhs), rhs=Expr.from_ast(rhs),
+                    operator=op.text,
+                    lhs=Expr.from_ast(lhs, env),
+                    rhs=Expr.from_ast(rhs, env),
                 )
             )
         elif ast.type in (
             AstType.logical_and_expression,
             AstType.logical_or_expression,
         ):
-            lhs = Prop.from_ast(ast[0])
-            rhs = Prop.from_ast(ast[2])
+            lhs = Prop.from_ast(ast[0], env)
+            rhs = Prop.from_ast(ast[2], env)
             if ast.type == AstType.logical_and_expression:
                 return And(lhs, rhs)
             else:
                 return Or(lhs, rhs)
         elif ast.type == AstType.unary_expression:
             assert ast[0].text == "!"
-            return Not(Prop.from_ast(ast[1]))
+            return Not(Prop.from_ast(ast[1], env))
         elif ast.type == AstType.primary_expression:
-            return Prop.from_ast(ast[1])
+            return Prop.from_ast(ast[1], env)
         elif ast.type == AstType.postfix_expression:
             assert (
-                ast[1].type == AstType.paren_left
-                and ast[0].type == AstType.IDENTIFIER
+                ast[1].type == AstType.paren_left and ast[0].type == AstType.IDENTIFIER
             )
             assert ast[0].text is not None
             if ast[0].text in ("forall", "exists"):
+                quantifier = ast[0].text
                 args = ast[2]
                 var = args[0][0].text
                 domain = args[0][2]
@@ -45,11 +48,22 @@ class Prop:
                     domain = domain.text
                     assert domain is not None
                 else:
-                    domain = (Expr.from_ast(domain[2][0]), Expr.from_ast(domain[2][2]))
+                    domain = (
+                        Expr.from_ast(domain[2][0], env),
+                        Expr.from_ast(domain[2][2], env),
+                    )
                 assert var is not None
-                return {"forall": ForAll, "exists": Exists}[ast[0].text](
-                    var=var, domain=domain, prop=Prop.from_ast(args[2]),
-                )
+                env.open_scope()
+                ty = domain if isinstance(domain, str) else "int"
+                env[var] = ty
+                prop = Prop.from_ast(args[2], env)
+                env.close_scope()
+                if quantifier == "forall":
+                    return ForAll(var=VarExpr(var, ty), domain=domain, prop=prop)
+                elif quantifier == "exists":
+                    return Exists(var=VarExpr(var, ty), domain=domain, prop=prop)
+                else:
+                    assert False, f"unknown quantifier {quantifier}"
             else:
                 raise NotImplementedError
         else:
@@ -76,6 +90,9 @@ class Prop:
     def __str__(self) -> str:
         raise NotImplementedError
 
+    def as_z3(self, env: Dict[str, str]):
+        raise NotImplementedError
+
 
 @dataclass
 class Then(Prop):
@@ -99,46 +116,61 @@ class Then(Prop):
 
 @dataclass
 class ForAll(Prop):
-    var: str
+    var: VarExpr
     domain: Union[Tuple[Expr, Expr], str]
     prop: Prop
 
     def assign(self, vars: Dict[str, Expr]) -> Prop:
         if self.var in vars:
             vars = vars.copy()
-            del vars[self.var]
-        return ForAll(var=self.var, domain=self.domain, prop=self.prop.assign(vars))
+            del vars[self.var.var]
+        domain = self.domain
+        if isinstance(domain, tuple):
+            domain = (domain[0].assign(vars), domain[1].assign(vars))
+        return ForAll(var=self.var, domain=domain, prop=self.prop.assign(vars))
 
     def free_vars(self, bound_vars: FrozenSet[str]) -> Set[str]:
-        bound_vars |= {self.var}
-        return self.prop.free_vars(bound_vars) | ((
-            (self.domain[0].vars() | self.domain[1].vars()) - bound_vars
-        ) if not isinstance(self.domain, str) else set())
+        bound_vars |= {self.var.var}
+        return self.prop.free_vars(bound_vars) | (
+            ((self.domain[0].vars() | self.domain[1].vars()) - bound_vars)
+            if not isinstance(self.domain, str)
+            else set()
+        )
 
     def __str__(self) -> str:
-        return (f"∀{self.var}∈"
-            + (self.domain if isinstance(self.domain, str) else "({},{})".format(*self.domain))
-            + f".{self.prop}"
+        domain = (
+            self.domain
+            if isinstance(self.domain, str)
+            else "({},{})".format(*self.domain)
         )
+        return f"∀{self.var.var}∈{domain}.{self.prop}"
 
 
 @dataclass
 class Exists(Prop):
-    var: str
-    domain: str
+    var: VarExpr
+    domain: Union[Tuple[Expr, Expr], str]
     prop: Prop
 
     def assign(self, vars: Dict[str, Expr]) -> Prop:
         if self.var in vars:
             vars = vars.copy()
-            del vars[self.var]
-        return Exists(var=self.var, domain=self.domain, prop=self.prop.assign(vars))
+            del vars[self.var.var]
+        domain = self.domain
+        if isinstance(domain, tuple):
+            domain = (domain[0].assign(vars), domain[1].assign(vars))
+        return Exists(var=self.var, domain=domain, prop=self.prop.assign(vars))
 
     def free_vars(self, bound_vars: FrozenSet[str]) -> Set[str]:
-        return self.prop.free_vars(bound_vars | {self.var})
+        return self.prop.free_vars(bound_vars | {self.var.var})
 
     def __str__(self) -> str:
-        return f"∃{self.var}∈{self.domain}. {self.prop}"
+        domain = (
+            self.domain
+            if isinstance(self.domain, str)
+            else "({},{})".format(*self.domain)
+        )
+        return f"∃{self.var.var}∈{domain}.{self.prop}"
 
 
 @dataclass
