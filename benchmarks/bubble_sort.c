@@ -14,9 +14,9 @@ void bubble_sort(int arr[], int size) {
                 arr[i + 1] = arr[i];
                 arr[i] = tmp;
             }
-            assert(forall(k, range(0, i + 1), arr[k] <= arr[i + 1]));
+            assert(j >= 0 && j < size && i >= 0 && i < size && forall(k, range(0, i + 1), arr[k] <= arr[i + 1]));
         }
-        assert(forall(k, range(size - j - 1, size),
+        assert(j >= 0 && j < size && forall(k, range(size - j - 1, size),
                       forall(t, range(0, k), arr[t] <= arr[k])));
     }
 }
