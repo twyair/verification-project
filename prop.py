@@ -73,7 +73,6 @@ class Prop:
                     then=Prop.from_ast(args[2], env)
                 )
             else:
-                print(ast)
                 raise NotImplementedError
         else:
             raise NotImplementedError

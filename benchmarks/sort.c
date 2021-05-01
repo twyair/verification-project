@@ -17,7 +17,6 @@ void bubble_sort(int arr[], int size) {
             }
             assert(
                 forall(k, range(0, i + 1), arr[k] <= arr[i + 1])
-                /*&& forall(k, range(size - j - 1, size - 1), arr[k] <= arr[k + 1])*/
                 && forall(
                     k, range(size - j, size),
                     forall(t, range(0, k), arr[t] <= arr[k])
@@ -26,8 +25,6 @@ void bubble_sort(int arr[], int size) {
         }
         assert(
             forall(
-                /*k, range(size - j - 2, size - 1),
-                then(k >= 0, arr[k] <= arr[k + 1])*/
                 k, range(size - j - 1, size),
                 forall(t, range(0, k), arr[t] <= arr[k])
             )
@@ -46,5 +43,27 @@ void bubble_sort_sub(int arr[], int size) {
             arr[i] = tmp;
         }
         assert(forall(k, range(0, i + 1), arr[k] <= arr[i + 1]));
+    }
+}
+
+// doesn't work
+void insertion_sort(int arr[], int size) {
+    requires(size > 0);
+    ensures(forall(k, range(0, size - 1), arr[k] <= arr[k + 1]));
+    for (int i = 1; i < size; i += 1) {
+        int curr = arr[i];
+        for (int j = 0; j < i; j += 1) {
+            if (arr[j] >= curr) {
+                for (int k = i; k > j; k -= 1) {
+                    arr[k] = arr[k - 1];
+                    assert(j >= 0 && k <= i && curr <= arr[j] && forall(t, range(0, j-1), curr > arr[t]) && forall(t, range(0, i), arr[t] <= arr[t + 1]));
+                }
+                assert(curr >= arr[j] && forall(t, range(0, j-1), curr > arr[t]) && forall(t, range(0, i), arr[t] <= arr[t + 1]));
+                arr[j] = curr;
+                break;
+            }
+            assert((arr[i] == curr && curr > arr[i - 1] || j < i - 1) && forall(t, range(0, i - 1), arr[t] <= arr[t + 1]));
+        }
+        assert(forall(t, range(0, i), arr[t] <= arr[t + 1]));
     }
 }

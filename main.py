@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import json
 from typing import Dict, Optional
 from functools import reduce
+import os
 
 from pygraphviz.agraph import AGraph
 import z3
@@ -60,6 +61,10 @@ PATH = "benchmarks/{}.json"
 
 
 def get_functions(filename: str) -> Dict[str, "Function"]:
+    err = os.system(f'./comp-benchmark.sh "{filename}"')
+    if err != 0:
+        raise Exception(f"error code: {err}")
+
     with open(PATH.format(filename)) as f:
         ast = parse(json.load(f))
 
