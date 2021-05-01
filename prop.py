@@ -66,7 +66,14 @@ class Prop:
                     return Exists(var=VarExpr(var_name, ty), domain=domain, prop=prop)
                 else:
                     assert False, f"unknown quantifier {quantifier}"
+            elif ast[0].text == "then":
+                args = ast[2]
+                return Then(
+                    if_=Prop.from_ast(args[0], env),
+                    then=Prop.from_ast(args[2], env)
+                )
             else:
+                print(ast)
                 raise NotImplementedError
         else:
             raise NotImplementedError

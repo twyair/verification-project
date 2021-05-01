@@ -79,6 +79,7 @@ def get_functions(filename: str) -> Dict[str, "Function"]:
 class Function:
     name: str
     cfg: CfgNode
+    params: Dict[str, str]
     vars: Dict[str, str]
 
     @staticmethod
@@ -112,6 +113,7 @@ class Function:
                         ty = "array-" + ty
                     assert name is not None
                     env[name] = ty
+        params = env.get_vars()
         requires = find_ensures(ast, "requires")
         if requires is not None:
             requires = Prop.from_ast(requires, env)
@@ -119,13 +121,16 @@ class Function:
         if ensures is not None:
             ensures = Prop.from_ast(ensures, env)
         cfg = create_cfg(ast, requires, ensures, env)
-        return Function(cfg=cfg, name=fn_name, vars=env.get_vars())
+        vars = env.get_vars()
+        for p in params:
+            del vars[p]
+        return Function(cfg=cfg, name=fn_name, vars=vars, params=params)
 
     def get_proof_rule(self) -> Prop:
-        # def add_quantifiers(prop: Prop) -> Prop:
-        #     return reduce(
-        #         lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), prop
-        #     )
+        def add_quantifiers(prop: Prop) -> Prop:
+            return reduce(
+                lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), prop
+            )
         rule = reduce(
             lambda acc, x: And(acc, x),
             [
@@ -133,10 +138,22 @@ class Function:
                 for path in self.cfg.generate_paths(BasicPath.empty(), frozenset())
             ],
         )
-        return rule
+        return add_quantifiers(rule)
 
     def get_proof_rule_as_string(self) -> str:
         return str(self.get_proof_rule())
+
+    def check_iter(self):
+        for path in self.cfg.generate_paths(BasicPath.empty(), frozenset()):
+            prop = path.get_proof_rule()
+            prop = reduce(
+                lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), prop
+            )
+            solver = z3.Solver()
+            solver.add(z3.Not(prop.as_z3()))
+            if solver.check().r == 1:
+                yield prop, solver
+
 
     def check(self) -> CheckResult:
         """

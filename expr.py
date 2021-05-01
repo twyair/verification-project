@@ -56,7 +56,7 @@ class Environment:
         self.renamer.pop()
 
     def get_vars(self) -> Dict[str, str]:
-        return self.vars
+        return self.vars.copy()
 
 
 @dataclass(frozen=True)
