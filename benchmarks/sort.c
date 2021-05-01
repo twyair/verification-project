@@ -52,18 +52,17 @@ void insertion_sort(int arr[], int size) {
     ensures(forall(k, range(0, size - 1), arr[k] <= arr[k + 1]));
     for (int i = 1; i < size; i += 1) {
         int curr = arr[i];
-        for (int j = 0; j <= i; j += 1) {
-            if (arr[j] >= curr) {
-                for (int k = i; k > j; k -= 1) {
-                    arr[k] = arr[k - 1];
-                    assert(k <= i && curr <= arr[j] && forall(t, range(0, j-1), curr > arr[t]) && forall(t, range(0, i), arr[t] <= arr[t + 1]));
-                }
-                assert(curr >= arr[j] && forall(t, range(0, j-1), curr > arr[t]) && forall(t, range(0, i), arr[t] <= arr[t + 1]));
-                arr[j] = curr;
-                break;
-            }
-            assert(j < i - 1 && forall(t, range(0, i - 1), arr[t] <= arr[t + 1]));
+        int j = 0;
+        for (int _j = 0; arr[j] < arr[i] && j < i; j += 1) {
+            assert(i > 0 && curr==arr[i] && j < i && forall(t, range(0, j + 1), arr[i] > arr[t]) && forall(t, range(0, i - 1), arr[t] <= arr[t + 1]));
         }
-        assert(forall(t, range(0, i), arr[t] <= arr[t + 1]));
+        for (int k = i; k > j; k -= 1) {
+            arr[k] = arr[k - 1];
+            // path: B -> B
+    /* B */ assert(i > 0 && curr <= arr[j] && arr[k] == arr[k - 1] && forall(t, range(0, j), curr > arr[t]) && forall(t, range(0, i), arr[t] <= arr[t + 1]));
+        }
+        assert(i > 0 && curr <= arr[j] && forall(t, range(0, j), curr > arr[t]) && forall(t, range(0, i), arr[t] <= arr[t + 1]));
+        arr[j] = curr;
+        assert(i > 0 && forall(t, range(0, i), arr[t] <= arr[t + 1]));
     }
 }
