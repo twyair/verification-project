@@ -54,12 +54,23 @@ void insertion_sort(int arr[], int size) {
         int curr = arr[i];
         int j = 0;
         for (int _j = 0; arr[j] < arr[i] && j < i; j += 1) {
-            assert(i > 0 && curr==arr[i] && j < i && forall(t, range(0, j + 1), arr[i] > arr[t]) && forall(t, range(0, i - 1), arr[t] <= arr[t + 1]));
+            assert(
+                i > 0
+                && curr==arr[i]
+                && j < i
+                && forall(t, range(0, j + 1), arr[i] > arr[t])
+                && forall(t, range(0, i - 1), arr[t] <= arr[t + 1])
+            );
         }
         for (int k = i; k > j; k -= 1) {
             arr[k] = arr[k - 1];
-            // path: B -> B
-    /* B */ assert(i > 0 && curr <= arr[j] && arr[k] == arr[k - 1] && forall(t, range(0, j), curr > arr[t]) && forall(t, range(0, i), arr[t] <= arr[t + 1]));
+            assert(
+                i > 0
+                && curr <= arr[j]
+                && arr[k] == arr[k - 1]
+                && forall(t, range(0, j), curr > arr[t])
+                && forall(t, range(0, i), arr[t] <= arr[t + 1])
+            );
         }
         assert(i > 0 && curr <= arr[j] && forall(t, range(0, j), curr > arr[t]) && forall(t, range(0, i), arr[t] <= arr[t + 1]));
         arr[j] = curr;
