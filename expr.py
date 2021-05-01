@@ -1,15 +1,18 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable, DefaultDict, Dict, List, Set, ClassVar
+from typing import Any, Callable, DefaultDict, Dict, List, Set, ClassVar, Tuple
 import operator
 from cast import AstType, AstNode
 import z3
 
 
+Type = str
+
+
 @dataclass
 class Environment:
-    scopes: List[Dict[str, str]]
-    vars: Dict[str, str]
+    scopes: List[Dict[str, Type]]
+    vars: Dict[str, Type]
     names_count: DefaultDict[str, int]
     renamer: List[Dict[str, str]]
 
@@ -32,8 +35,17 @@ class Environment:
         self.names_count[var] += 1
         self.vars[self.rename(var)] = type_
 
+    def __contains__(self, var: str) -> bool:
+        for scope in self.scopes:
+            if var in scope:
+                return True
+        return False
+
     def rename(self, var: str) -> str:
-        return self.renamer[-1].get(var, var)
+        for scope in reversed(self.renamer):
+            if var in scope:
+                return scope[var]
+        return var
 
     def open_scope(self) -> None:
         self.scopes.append({})
@@ -43,8 +55,8 @@ class Environment:
         self.scopes.pop()
         self.renamer.pop()
 
-    def make_var_expr(self, var: str) -> "VarExpr":
-        return VarExpr(self.rename(var), self[var])
+    def get_vars(self) -> Dict[str, str]:
+        return self.vars
 
 
 @dataclass(frozen=True)
@@ -73,7 +85,7 @@ class GenericExpr:
             )
         elif ast.type == AstType.IDENTIFIER:
             assert ast.text is not None
-            return env.make_var_expr(ast.text)
+            return VarExpr(env.rename(ast.text), env[ast.text])
         elif ast.type in (
             AstType.logical_and_expression,
             AstType.logical_or_expression,
@@ -138,6 +150,15 @@ class RelExpr(BoolExpr):
     lhs: "Expr"
     rhs: "Expr"
 
+    SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any, Any], Any]]] = {
+        "==": operator.eq,
+        "!=": operator.ne,
+        "<": operator.lt,
+        "<=": operator.le,
+        ">": operator.gt,
+        ">=": operator.ge,
+    }
+
     def assign(self, vars: Dict[str, "Expr"]) -> "RelExpr":
         return RelExpr(
             operator=self.operator, lhs=self.lhs.assign(vars), rhs=self.rhs.assign(vars)
@@ -152,12 +173,20 @@ class RelExpr(BoolExpr):
         )
         return f"{self.lhs} {op} {self.rhs}"
 
+    def as_z3(self):
+        return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
+
 
 @dataclass(frozen=True)
 class BinBoolExpr(BoolExpr):
     operator: str  # && ||
     lhs: BoolExpr
     rhs: BoolExpr
+
+    SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any, Any], Any]]] = {
+        "&&": z3.And,
+        "||": z3.Or,
+    }
 
     def assign(self, vars: Dict[str, "Expr"]) -> "BinBoolExpr":
         return BinBoolExpr(
@@ -187,6 +216,9 @@ class BinBoolExpr(BoolExpr):
         else:
             assert False
 
+    def as_z3(self):
+        return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
+
 
 @dataclass(frozen=True)
 class NotBoolExpr(BoolExpr):
@@ -200,6 +232,9 @@ class NotBoolExpr(BoolExpr):
 
     def __str__(self) -> str:
         return f"¬({self.operand})"
+
+    def as_z3(self):
+        return z3.Not(self.operand.as_z3())
 
 
 @dataclass(frozen=True)
@@ -244,7 +279,7 @@ class BinExpr(Expr):
     lhs: Expr
     rhs: Expr
 
-    SYM2OPERATOR: ClassVar[Dict[str, Callable[[int, int], int]]] = {
+    SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any, Any], Any]]] = {
         "+": operator.add,
         "-": operator.sub,
         "/": operator.floordiv,
@@ -289,9 +324,7 @@ class BinExpr(Expr):
             assert False
 
     def as_z3(self):
-        return self.SYM2OPERATOR[self.operator](
-            self.lhs.as_z3(), self.rhs.as_z3()
-        )
+        return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
 
 
 @dataclass(frozen=True)
@@ -299,7 +332,7 @@ class UnaryExpr(Expr):
     operator: str  # + - ~
     operand: Expr
 
-    SYM2OPERATOR: ClassVar[Dict[str, Callable[[int], int]]] = {
+    SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any], Any]]] = {
         "+": operator.pos,
         "-": operator.neg,
         # "~": operator.inv,
@@ -357,6 +390,9 @@ class ChangeArrayExpr(Expr):
 
     def __str__(self) -> str:
         return f"Store({self.array}, {self.index}, {self.value})"
+
+    def as_z3(self):
+        return z3.Store(self.array.as_z3(), self.index.as_z3(), self.value.as_z3())
 
 
 @dataclass(frozen=True)

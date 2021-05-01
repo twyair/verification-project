@@ -264,7 +264,7 @@ def statement_create_cfg(
         value = Expr.from_ast(ast[1][2], env)
         env[var] = type_
         return AssignmentNode(
-            expression=value, var=env.make_var_expr(var), next_node=next_node
+            expression=value, var=VarExpr(env.rename(var), type_), next_node=next_node
         )
     elif ast.type == AstType.expression_statement:
         # TODO: handle ++i, --i, i++, i--

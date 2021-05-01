@@ -4,6 +4,7 @@ from typing import Dict, Optional
 from functools import reduce
 
 from pygraphviz.agraph import AGraph
+import z3
 
 from expr import Environment, VarExpr
 from cast import AstNode, parse, AstType
@@ -19,6 +20,22 @@ from cfg import (
     create_cfg,
 )
 from prop import And, Prop, ForAll
+
+@dataclass
+class CheckResult:
+    pass
+
+@dataclass
+class Unknown(CheckResult):
+    code: int
+
+@dataclass
+class Sat(CheckResult):
+    pass
+
+@dataclass
+class Unsat(CheckResult):
+    model: z3.ModelRef
 
 
 def get_first_child(node: AstNode, pred) -> AstNode:
@@ -102,9 +119,13 @@ class Function:
         if ensures is not None:
             ensures = Prop.from_ast(ensures, env)
         cfg = create_cfg(ast, requires, ensures, env)
-        return Function(cfg=cfg, name=fn_name, vars=env.vars)
+        return Function(cfg=cfg, name=fn_name, vars=env.get_vars())
 
     def get_proof_rule(self) -> Prop:
+        # def add_quantifiers(prop: Prop) -> Prop:
+        #     return reduce(
+        #         lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), prop
+        #     )
         rule = reduce(
             lambda acc, x: And(acc, x),
             [
@@ -112,12 +133,26 @@ class Function:
                 for path in self.cfg.generate_paths(BasicPath.empty(), frozenset())
             ],
         )
-        return reduce(
-            lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), rule
-        )
+        return rule
 
     def get_proof_rule_as_string(self) -> str:
         return str(self.get_proof_rule())
+
+    def check(self) -> CheckResult:
+        """
+        checks whether the function's proof rule is satisfiable
+        if it is, check() returns None
+        otherwise, check() returns a counterexample
+        """
+        solver = z3.Solver()
+        solver.add(z3.Not(self.get_proof_rule().as_z3()))
+        result = solver.check()
+        if result.r == 1:
+            return Unsat(solver.model())
+        elif result.r == -1:
+            return Sat()
+        else:
+            return Unknown(result.r)
 
     def draw_cfg(self, no_content=False):
         filepath = f"cfg-img/{self.name}.svg"
@@ -125,18 +160,23 @@ class Function:
         graph = AGraph(directed=True)
         ids = set()
 
-        def add_node(id_: int, color: str, content: str, shape: str, label: str):
+        def add_node(
+            id_: int,
+            color: str,
+            content: str,
+            shape: str,
+            label: str,
+            style: Optional[str] = None,
+            **kwargs,
+        ):
+            kwargs.update(color=color, shape=shape, penwidth="4")
+            if style is not None:
+                kwargs.update(style=style)
             if no_content:
-                graph.add_node(id_, color=color, label=label, shape=shape, style="bold")
+                kwargs.update(label=label)
             else:
-                graph.add_node(
-                    id_,
-                    color=color,
-                    label=content,
-                    shape=shape,
-                    style="bold",
-                    tooltip=label,
-                )
+                kwargs.update(label=content, tooltip=label)
+            graph.add_node(id_, **kwargs)
 
         def get_id(node: CfgNode) -> int:
             return id(node)
@@ -183,7 +223,7 @@ class Function:
                     id_,
                     color="black",
                     label="halt",
-                    shape="doubleoctagon",
+                    shape="ellipse",
                     content=f"{node.assertion}",
                 )
             elif isinstance(node, AssertNode):
