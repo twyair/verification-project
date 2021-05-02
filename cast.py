@@ -40,6 +40,7 @@ class AstType(enum.Enum):
     DEFAULT = "DEFAULT"
     INT = "INT"
     FLOAT = "FLOAT"
+    BOOL = "BOOL"
     VOID = "VOID"
     NE_OP = "NE_OP"
     GE_OP = "GE_OP"

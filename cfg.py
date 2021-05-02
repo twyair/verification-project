@@ -10,9 +10,10 @@ from expr import (
     ChangeArrayExpr,
     Environment,
     Expr,
+    GenericExpr,
     VarExpr,
 )
-from prop import And, Not, Prop, Then
+from prop import And, ConstProp, Not, Prop, Then
 
 
 @dataclass
@@ -62,7 +63,7 @@ class BasicPath:
             )
         else:
             return Then(
-                reduce(lambda acc, x: And(acc, x), self.reachability),
+                reduce(lambda acc, x: And(acc, x), self.reachability, ConstProp(True)),
                 self.assertion_end,
             )
 
@@ -281,9 +282,24 @@ def statement_create_cfg(
                 return AssertNode(
                     assertion=Prop.from_ast(ast[0][2], env), next_node=next_node
                 )
-            else:
-                assert ast[0][0].text in ("ensures", "requires")
+            elif ast[0][0].text == "ensures":
+                assert end_node.assertion is None
+                end_node.assertion = Prop.from_ast(ast[0][2], env)
                 return next_node
+            elif ast[0][0].text == "requires":
+                return next_node
+            elif ast[0][0].text == "freeze":
+                args = ast[0][2]
+                right = GenericExpr.from_ast(args[2], env)
+                assert isinstance(right, VarExpr)
+                assert args[0].type == AstType.IDENTIFIER
+                assert args[0].text is not None
+                env[args[0].text] = right.type_
+                var = GenericExpr.from_ast(args[0], env)
+                assert isinstance(var, VarExpr)
+                return AssignmentNode(right, var, next_node)
+            else:
+                assert False, f"unknown function {ast[0][0].text}"
 
         if ast[0].type != AstType.assignment_expression:
             # FIXME

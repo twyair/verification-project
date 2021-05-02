@@ -121,17 +121,17 @@ class Function:
                         and p[1][1].text == "["
                     ):
                         name = p[1][0].text
-                        ty = "array-" + ty
+                        ty = "array_" + ty
                     assert name is not None
                     env[name] = ty
         params = env.get_vars()
         requires = find_ensures(ast, "requires")
         if requires is not None:
             requires = Prop.from_ast(requires, env)
-        ensures = find_ensures(ast, "ensures")
-        if ensures is not None:
-            ensures = Prop.from_ast(ensures, env)
-        cfg = create_cfg(ast, requires, ensures, env)
+        # ensures = find_ensures(ast, "ensures")
+        # if ensures is not None:
+        #     ensures = Prop.from_ast(ensures, env)
+        cfg = create_cfg(ast, requires, None, env)
         vars = env.get_vars()
         for p in params:
             del vars[p]

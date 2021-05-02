@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, FrozenSet, Set, Tuple, Union
-from expr import BinBoolExpr, BoolExpr, Environment, RelExpr, Expr, VarExpr
+from expr import BinBoolExpr, BoolExpr, Environment, GenericExpr, RelExpr, Expr, VarExpr
 from cast import AstNode, AstType
 import z3
 
@@ -35,9 +35,12 @@ class Prop:
         elif ast.type == AstType.primary_expression:
             return Prop.from_ast(ast[1], env)
         elif ast.type == AstType.postfix_expression:
-            assert (
+
+            if not (
                 ast[1].type == AstType.paren_left and ast[0].type == AstType.IDENTIFIER
-            )
+            ):
+                return ExprProp(GenericExpr.from_ast(ast, env))
+
             assert ast[0].text is not None
             if ast[0].text in ("forall", "exists"):
                 quantifier = ast[0].text
@@ -72,6 +75,7 @@ class Prop:
                 return Then(
                     if_=Prop.from_ast(args[0], env), then=Prop.from_ast(args[2], env)
                 )
+                # TODO? add an optional `else_` to `Then`
             else:
                 raise NotImplementedError
         else:
@@ -87,7 +91,7 @@ class Prop:
         elif isinstance(expr, RelExpr):
             return RelProp(expr)
         else:
-            assert False
+            return ExprProp(expr)
 
     def assign(self, vars: Dict[str, Expr]) -> "Prop":
         raise NotImplementedError
@@ -267,6 +271,40 @@ class Not(Prop):
 
     def as_z3(self):
         return z3.Not(self.prop.as_z3())
+
+
+@dataclass
+class ConstProp(Prop):
+    value: bool
+
+    def assign(self, vars: Dict[str, Expr]) -> Prop:
+        return self
+
+    def free_vars(self, bound_vars: FrozenSet[str]) -> Set[str]:
+        pass
+
+    def __str__(self) -> str:
+        return f"{self.value}"
+
+    def as_z3(self):
+        return self.value
+
+
+@dataclass
+class ExprProp(Prop):
+    expr: GenericExpr
+
+    def assign(self, vars: Dict[str, Expr]) -> Prop:
+        return ExprProp(expr=self.expr.assign(vars))
+
+    def free_vars(self, bound_vars: FrozenSet[str]) -> Set[str]:
+        pass
+
+    def __str__(self) -> str:
+        return f"{self.expr}"
+
+    def as_z3(self):
+        return self.expr.as_z3()
 
 
 @dataclass

@@ -143,7 +143,7 @@ class BoolExpr(GenericExpr):
     @staticmethod
     def from_ast(ast: AstNode, env: Environment) -> "BoolExpr":
         expr = GenericExpr.from_ast(ast, env)
-        assert isinstance(expr, BoolExpr)
+        # assert isinstance(expr, BoolExpr)
         return expr
 
 
@@ -183,8 +183,8 @@ class RelExpr(BoolExpr):
 @dataclass(frozen=True)
 class BinBoolExpr(BoolExpr):
     operator: str  # && ||
-    lhs: BoolExpr
-    rhs: BoolExpr
+    lhs: GenericExpr
+    rhs: GenericExpr
 
     SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any, Any], Any]]] = {
         "&&": z3.And,
@@ -225,7 +225,7 @@ class BinBoolExpr(BoolExpr):
 
 @dataclass(frozen=True)
 class NotBoolExpr(BoolExpr):
-    operand: BoolExpr
+    operand: GenericExpr
 
     def assign(self, vars: Dict[str, "Expr"]) -> "NotBoolExpr":
         return NotBoolExpr(operand=self.operand.assign(vars))
@@ -248,7 +248,7 @@ class Expr(GenericExpr):
     @staticmethod
     def from_ast(ast: AstNode, env: Environment) -> "Expr":
         expr = GenericExpr.from_ast(ast, env)
-        assert isinstance(expr, Expr)
+        # assert isinstance(expr, Expr)
         return expr
 
 
@@ -272,8 +272,12 @@ class VarExpr(Expr):
             return z3.Int(self.var)
         elif self.type_ == "float":
             return z3.Const(self.var, z3.FloatDouble())
-        elif self.type_ == "array-int":
+        elif self.type_ == "bool":
+            return z3.Bool(self.var)
+        elif self.type_ == "array_int":
             return z3.Array(self.var, z3.IntSort(), z3.IntSort())
+        elif self.type_ == "array_bool":
+            return z3.Array(self.var, z3.IntSort(), z3.BoolSort())
         else:
             assert False, f"unknown type: {self.type_}"
 
@@ -375,7 +379,7 @@ class NumericExpr(Expr):
 
     def as_z3(self):
         try:
-            return int(self.number)
+            return z3.IntVal(int(self.number))
         except ValueError:
             return float(self.number)
 
