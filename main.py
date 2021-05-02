@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import json
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from functools import reduce
 import os
 
@@ -111,7 +111,7 @@ class Function:
             for p in params.children:
                 if p.type == AstType.parameter_declaration:
                     ty = p[0].text
-                    assert ty is not None and ty in ("int",)  # TODO: add more types
+                    assert ty is not None and ty in ("int", "float", "bool",)
                     name = None
                     if p[1].type == AstType.IDENTIFIER:
                         name = p[1].text
@@ -155,22 +155,25 @@ class Function:
     def get_proof_rule_as_string(self) -> str:
         return str(self.get_proof_rule())
 
-    def check_iter(self):
+    def get_failing_props(self) -> List[Prop]:
+        props: List[Prop] = []
         for path in self.cfg.generate_paths(BasicPath.empty(), frozenset()):
             prop = path.get_proof_rule()
-            prop = reduce(
-                lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), prop
-            )
             solver = z3.Solver()
             solver.add(z3.Not(prop.as_z3()))
             if solver.check().r == 1:
-                yield prop, solver
+                for x in props:
+                    if x == prop:
+                        break
+                else:
+                    props.append(prop)
+        return props
 
     def check(self) -> CheckResult:
         """
         checks whether the function's proof rule is satisfiable
-        if it is, check() returns None
-        otherwise, check() returns a counterexample
+        if it is, `check()` returns a `Sat` object
+        otherwise, `check()` returns an `Unsat`/`Unknown` object
         """
         solver = z3.Solver()
         solver.add(z3.Not(self.get_proof_rule().as_z3()))

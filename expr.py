@@ -106,7 +106,10 @@ class GenericExpr:
             )
         elif ast.type == AstType.CONSTANT:
             assert ast.text is not None
-            return NumericExpr(int(ast.text))
+            if ast.text in ("true", "false",):
+                return BoolValue(ast.text == "true")
+            else:
+                return NumericExpr(ast.text)
         elif ast.type in (
             AstType.additive_expression,
             AstType.multiplicative_expression,
@@ -267,6 +270,8 @@ class VarExpr(Expr):
         # TODO: add more types
         if self.type_ == "int":
             return z3.Int(self.var)
+        elif self.type_ == "float":
+            return z3.Const(self.var, z3.FloatDouble())
         elif self.type_ == "array-int":
             return z3.Array(self.var, z3.IntSort(), z3.IntSort())
         else:
@@ -357,7 +362,7 @@ class UnaryExpr(Expr):
 
 @dataclass(frozen=True)
 class NumericExpr(Expr):
-    number: int
+    number: str
 
     def assign(self, vars: Dict[str, "Expr"]) -> "NumericExpr":
         return self
@@ -369,7 +374,27 @@ class NumericExpr(Expr):
         return f"{self.number}"
 
     def as_z3(self):
-        return self.number
+        try:
+            return int(self.number)
+        except ValueError:
+            return float(self.number)
+
+
+@dataclass
+class BoolValue(BoolExpr):
+    value: bool
+
+    def assign(self, vars: Dict[str, "Expr"]) -> "BoolValue":
+        return self
+
+    def vars(self) -> Set[str]:
+        return set()
+
+    def __str__(self) -> str:
+        return f"{self.value}"
+
+    def as_z3(self):
+        return self.value
 
 
 @dataclass(frozen=True)

@@ -256,7 +256,8 @@ def statement_create_cfg(
         # TODO: what about "int x, y;"
         type_ = ast[0].text
         # TODO: what about array types?
-        assert type_ is not None and type_ in ("int",)  # TODO: add more types
+        # TODO? more types?
+        assert type_ is not None and type_ in ("int", "float", "bool",)
         if ast[1].type != AstType.init_declarator:
             var = ast[1].text
             assert var is not None

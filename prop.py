@@ -56,9 +56,8 @@ class Prop:
                 env.open_scope()
                 ty = domain if isinstance(domain, str) else "int"
                 env[var] = ty
-                del env.vars[
-                    env.rename(var)
-                ]  # TODO: is there a better way to exclude quantified variables
+                # TODO: is there a better way to exclude quantified variables
+                del env.vars[env.rename(var)]
                 prop = Prop.from_ast(args[2], env)
                 var_name = env.rename(var)
                 env.close_scope()
