@@ -24,7 +24,8 @@ from prop import And, Prop, ForAll
 
 @dataclass
 class CheckResult:
-    pass
+    def is_sat(self) -> bool:
+        return False
 
 @dataclass
 class Unknown(CheckResult):
@@ -32,7 +33,8 @@ class Unknown(CheckResult):
 
 @dataclass
 class Sat(CheckResult):
-    pass
+    def is_sat(self) -> bool:
+        return True
 
 @dataclass
 class Unsat(CheckResult):

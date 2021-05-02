@@ -254,11 +254,14 @@ def statement_create_cfg(
             assert False
     elif ast.type == AstType.declaration:
         # TODO: what about "int x, y;"
-        if ast[1].type != AstType.init_declarator:
-            return next_node
-        # TODO: what about array types?
         type_ = ast[0].text
+        # TODO: what about array types?
         assert type_ is not None and type_ in ("int",)  # TODO: add more types
+        if ast[1].type != AstType.init_declarator:
+            var = ast[1].text
+            assert var is not None
+            env[var] = type_
+            return next_node
         var = ast[1][0].text
         assert var is not None
         value = Expr.from_ast(ast[1][2], env)
