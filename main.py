@@ -7,7 +7,7 @@ import os
 from pygraphviz.agraph import AGraph
 import z3
 
-from expr import Environment, VarExpr
+from expr import BinBoolExpr, Environment, GenericExpr, VarExpr, Prop, ForAll
 from cast import AstNode, parse, AstType
 from cfg import (
     AssertNode,
@@ -20,7 +20,6 @@ from cfg import (
     StartNode,
     create_cfg,
 )
-from prop import And, Prop, ForAll
 
 
 @dataclass
@@ -128,23 +127,20 @@ class Function:
         requires = find_ensures(ast, "requires")
         if requires is not None:
             requires = Prop.from_ast(requires, env)
-        # ensures = find_ensures(ast, "ensures")
-        # if ensures is not None:
-        #     ensures = Prop.from_ast(ensures, env)
-        cfg = create_cfg(ast, requires, None, env)
+        cfg = create_cfg(ast, requires, env)
         vars = env.get_vars()
         for p in params:
             del vars[p]
         return Function(cfg=cfg, name=fn_name, vars=vars, params=params)
 
-    def get_proof_rule(self) -> Prop:
-        def add_quantifiers(prop: Prop) -> Prop:
+    def get_proof_rule(self) -> GenericExpr:
+        def add_quantifiers(prop: GenericExpr) -> GenericExpr:
             return reduce(
                 lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), prop
             )
 
         rule = reduce(
-            lambda acc, x: And(acc, x),
+            lambda acc, x: BinBoolExpr("&&", acc, x),
             [
                 path.get_proof_rule()
                 for path in self.cfg.generate_paths(BasicPath.empty(), frozenset())

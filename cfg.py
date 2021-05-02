@@ -4,22 +4,24 @@ from cast import AstNode, AstType
 from dataclasses import dataclass
 import dataclasses
 from expr import (
-    ArrayItemExpr,
+    ArraySelect,
+    BinBoolExpr,
     BinExpr,
-    BoolExpr,
-    ChangeArrayExpr,
+    BoolValue,
+    ArrayStore,
     Environment,
-    Expr,
     GenericExpr,
     VarExpr,
+    Prop,
+    Then,
+    NotBoolExpr,
 )
-from prop import And, ConstProp, Not, Prop, Then
 
 
 @dataclass
 class BasicPath:
-    reachability: List[Prop]
-    transformation: Dict[str, Expr]
+    reachability: List[GenericExpr]
+    transformation: Dict[str, GenericExpr]
     assertion_start: Optional[Prop]
     assertion_end: Optional[Prop]
 
@@ -35,20 +37,20 @@ class BasicPath:
             self.assertion_end,
         )
 
-    def condition(self, cond: Prop) -> "BasicPath":
+    def condition(self, cond: GenericExpr) -> "BasicPath":
         cp = self.copy()
         cp.reachability.append(cond.assign(self.transformation))
         return cp
 
-    def transform(self, var: str, expr: Expr) -> "BasicPath":
+    def transform(self, var: str, expr: GenericExpr) -> "BasicPath":
         cp = self.copy()
         cp.transformation[var] = expr.assign(self.transformation)
         return cp
 
-    def assert_start(self, prop: Prop) -> "BasicPath":
+    def assert_start(self, prop: GenericExpr) -> "BasicPath":
         return dataclasses.replace(self, assertion_start=prop)
 
-    def assert_end(self, prop: Prop) -> "BasicPath":
+    def assert_end(self, prop: GenericExpr) -> "BasicPath":
         return dataclasses.replace(self, assertion_end=prop.assign(self.transformation))
 
     def get_proof_rule(self) -> Prop:
@@ -57,13 +59,19 @@ class BasicPath:
         if self.assertion_start is not None:
             return Then(
                 reduce(
-                    lambda acc, x: And(acc, x), self.reachability, self.assertion_start
+                    lambda acc, x: BinBoolExpr("&&", acc, x),
+                    self.reachability,
+                    self.assertion_start,
                 ),
                 self.assertion_end,
             )
         else:
             return Then(
-                reduce(lambda acc, x: And(acc, x), self.reachability, ConstProp(True)),
+                reduce(
+                    lambda acc, x: BinBoolExpr("&&", acc, x),
+                    self.reachability,
+                    BoolValue(True),
+                ),
                 self.assertion_end,
             )
 
@@ -92,7 +100,7 @@ class DummyNode(CfgNode):
 
 @dataclass
 class StartNode(CfgNode):
-    requires: Optional[Prop]
+    requires: Optional[GenericExpr]
     next_node: CfgNode
 
     def generate_paths(
@@ -113,7 +121,7 @@ class StartNode(CfgNode):
 
 @dataclass
 class EndNode(CfgNode):
-    assertion: Optional[Prop]
+    assertion: Optional[GenericExpr]
 
     def generate_paths(
         self, path: BasicPath, visited: FrozenSet[int]
@@ -127,16 +135,18 @@ class EndNode(CfgNode):
 
 @dataclass
 class CondNode(CfgNode):
-    condition: BoolExpr
+    condition: GenericExpr
     true_br: CfgNode
     false_br: CfgNode
 
     def generate_paths(
         self, path: BasicPath, visited: FrozenSet[int]
     ) -> Iterator[BasicPath]:
-        condition = Prop.from_expr(self.condition)
+        condition = self.condition
         yield from self.true_br.generate_paths(path.condition(condition), visited)
-        yield from self.false_br.generate_paths(path.condition(Not(condition)), visited)
+        yield from self.false_br.generate_paths(
+            path.condition(NotBoolExpr(condition)), visited
+        )
 
     def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
         if id(self) in visited:
@@ -151,7 +161,7 @@ class CondNode(CfgNode):
 
 @dataclass
 class AssignmentNode(CfgNode):
-    expression: Expr
+    expression: GenericExpr
     var: VarExpr
     next_node: CfgNode
 
@@ -172,7 +182,7 @@ class AssignmentNode(CfgNode):
 
 @dataclass
 class AssertNode(CfgNode):
-    assertion: Prop
+    assertion: GenericExpr
     next_node: CfgNode
 
     def generate_paths(
@@ -207,7 +217,7 @@ def statement_create_cfg(
         # TODO: handle switch
         assert ast[0].type == AstType.IF
         return CondNode(
-            condition=BoolExpr.from_ast(ast[2], env),
+            condition=GenericExpr.from_ast(ast[2], env),
             true_br=statement_create_cfg(
                 ast[4], next_node, end_node, loop_start, loop_end, env
             ),
@@ -245,7 +255,7 @@ def statement_create_cfg(
         elif ast[0].type == AstType.RETURN:
             if len(ast.children) == 3:
                 return AssignmentNode(
-                    expression=Expr.from_ast(ast[1], env),
+                    expression=GenericExpr.from_ast(ast[1], env),
                     var=VarExpr("ret", env["ret"]),
                     next_node=end_node,
                 )
@@ -266,7 +276,7 @@ def statement_create_cfg(
             return next_node
         var = ast[1][0].text
         assert var is not None
-        value = Expr.from_ast(ast[1][2], env)
+        value = GenericExpr.from_ast(ast[1][2], env)
         env[var] = type_
         return AssignmentNode(
             expression=value, var=VarExpr(env.rename(var), type_), next_node=next_node
@@ -305,10 +315,10 @@ def statement_create_cfg(
             # FIXME
             return next_node
 
-        value = Expr.from_ast(ast[0][2], env)
+        value = GenericExpr.from_ast(ast[0][2], env)
         operator = ast[0][1].text
         assert operator is not None
-        left = Expr.from_ast(ast[0][0], env)
+        left = GenericExpr.from_ast(ast[0][0], env)
 
         # TODO? handle chained assignments?
 
@@ -319,14 +329,12 @@ def statement_create_cfg(
 
         if isinstance(left, VarExpr):
             return AssignmentNode(expression=value, var=left, next_node=next_node)
-        elif isinstance(left, ArrayItemExpr):
+        elif isinstance(left, ArraySelect):
             # TODO? what about 2d+ arrays?
             assert isinstance(left.array, VarExpr)
             return AssignmentNode(
                 var=left.array,
-                expression=ChangeArrayExpr(
-                    array=left.array, index=left.index, value=value
-                ),
+                expression=ArrayStore(array=left.array, index=left.index, value=value),
                 next_node=next_node,
             )
         else:
@@ -334,7 +342,7 @@ def statement_create_cfg(
     elif ast.type == AstType.iteration_statement:
         if ast[0].type == AstType.WHILE:
             while_node = CondNode(
-                BoolExpr.from_ast(ast[2], env), DummyNode(), next_node
+                GenericExpr.from_ast(ast[2], env), DummyNode(), next_node
             )
             while_node.true_br = statement_create_cfg(
                 ast[4],
@@ -346,7 +354,7 @@ def statement_create_cfg(
             )
             return while_node
         elif ast[0].type == AstType.DO:
-            cond = CondNode(BoolExpr.from_ast(ast[4], env), DummyNode(), next_node)
+            cond = CondNode(GenericExpr.from_ast(ast[4], env), DummyNode(), next_node)
             cond.true_br = statement_create_cfg(
                 ast[1], cond, end_node, loop_start=cond, loop_end=next_node, env=env
             )
@@ -356,7 +364,9 @@ def statement_create_cfg(
             # for (decl; cond; inc) body
             env.open_scope()
             decl = statement_create_cfg(ast[2], DummyNode(), end_node, None, None, env)
-            cond = CondNode(BoolExpr.from_ast(ast[3][0], env), DummyNode(), next_node)
+            cond = CondNode(
+                GenericExpr.from_ast(ast[3][0], env), DummyNode(), next_node
+            )
             assert isinstance(decl, AssignmentNode)
             decl.next_node = cond
             inc = statement_create_cfg(
@@ -379,14 +389,14 @@ def statement_create_cfg(
 
 
 def create_cfg(
-    ast: AstNode, requires: Optional[Prop], ensures: Optional[Prop], env: Environment
+    ast: AstNode, requires: Optional[GenericExpr], env: Environment
 ) -> CfgNode:
     assert ast.type == AstType.function_definition
 
     body = ast[-1]
     assert body.type == AstType.compound_statement
 
-    end_node = EndNode(ensures)
+    end_node = EndNode(None)
     return StartNode(
         requires, statement_create_cfg(body, end_node, end_node, None, None, env)
     )

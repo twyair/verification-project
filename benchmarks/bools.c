@@ -2,7 +2,7 @@
 #define requires(x)
 #define ensures(x)
 #define assert(x)
-#define freeze(x)
+#define freeze(x, y)
 #endif
 
 bool de_morgan(bool x, bool y) {
