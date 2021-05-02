@@ -33,6 +33,7 @@ class TestStringMethods(unittest.TestCase):
         self.assertTrue(fns["de_morgan"].check().is_sat())
         self.assertFalse(fns["de_morgan_bug"].check().is_sat())
         self.assertTrue(fns["first_true"].check().is_sat())
+        self.assertTrue(fns["flip_even"].check().is_sat())
 
 
 if __name__ == "__main__":
