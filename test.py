@@ -1,6 +1,7 @@
 import main
 import unittest
 
+
 class TestStringMethods(unittest.TestCase):
     def test_array(self):
         fns = main.get_functions("array")
@@ -23,6 +24,8 @@ class TestStringMethods(unittest.TestCase):
     def test_sort(self):
         fns = main.get_functions("sort")
         self.assertTrue(fns["bubble_sort_sub"].check().is_sat())
+        # self.assertTrue(fns["insertion_sort"].check().is_sat())
+
 
 if __name__ == "__main__":
     unittest.main()
