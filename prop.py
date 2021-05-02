@@ -56,7 +56,9 @@ class Prop:
                 env.open_scope()
                 ty = domain if isinstance(domain, str) else "int"
                 env[var] = ty
-                del env.vars[env.rename(var)]  # TODO: is there a better way to exclude quantified variables
+                del env.vars[
+                    env.rename(var)
+                ]  # TODO: is there a better way to exclude quantified variables
                 prop = Prop.from_ast(args[2], env)
                 var_name = env.rename(var)
                 env.close_scope()
@@ -69,8 +71,7 @@ class Prop:
             elif ast[0].text == "then":
                 args = ast[2]
                 return Then(
-                    if_=Prop.from_ast(args[0], env),
-                    then=Prop.from_ast(args[2], env)
+                    if_=Prop.from_ast(args[0], env), then=Prop.from_ast(args[2], env)
                 )
             else:
                 raise NotImplementedError
@@ -161,7 +162,14 @@ class ForAll(Prop):
             return z3.ForAll([self.var.as_z3()], self.prop.as_z3())
         else:
             var = self.var.as_z3()
-            return z3.ForAll([var], z3.Implies(z3.And(var >= self.domain[0].as_z3(), var < self.domain[1].as_z3()), self.prop.as_z3()))
+            return z3.ForAll(
+                [var],
+                z3.Implies(
+                    z3.And(var >= self.domain[0].as_z3(), var < self.domain[1].as_z3()),
+                    self.prop.as_z3(),
+                ),
+            )
+
 
 @dataclass
 class Exists(Prop):
@@ -194,7 +202,14 @@ class Exists(Prop):
             return z3.Exists([self.var.as_z3()], self.prop.as_z3())
         else:
             var = self.var.as_z3()
-            return z3.Exists([var], z3.Implies(z3.And(var >= self.domain[0].as_z3(), var < self.domain[1].as_z3()), self.prop.as_z3()))
+            return z3.Exists(
+                [var],
+                z3.Implies(
+                    z3.And(var >= self.domain[0].as_z3(), var < self.domain[1].as_z3()),
+                    self.prop.as_z3(),
+                ),
+            )
+
 
 @dataclass
 class And(Prop):
@@ -216,6 +231,7 @@ class And(Prop):
     def as_z3(self):
         return z3.And(self.lhs.as_z3(), self.rhs.as_z3())
 
+
 @dataclass
 class Or(Prop):
     lhs: Prop
@@ -236,6 +252,7 @@ class Or(Prop):
     def as_z3(self):
         return z3.Or(self.lhs.as_z3(), self.rhs.as_z3())
 
+
 @dataclass
 class Not(Prop):
     prop: Prop
@@ -251,6 +268,7 @@ class Not(Prop):
 
     def as_z3(self):
         return z3.Not(self.prop.as_z3())
+
 
 @dataclass
 class RelProp(Prop):

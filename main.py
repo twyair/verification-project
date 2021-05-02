@@ -22,19 +22,23 @@ from cfg import (
 )
 from prop import And, Prop, ForAll
 
+
 @dataclass
 class CheckResult:
     def is_sat(self) -> bool:
         return False
 
+
 @dataclass
 class Unknown(CheckResult):
     code: int
+
 
 @dataclass
 class Sat(CheckResult):
     def is_sat(self) -> bool:
         return True
+
 
 @dataclass
 class Unsat(CheckResult):
@@ -138,6 +142,7 @@ class Function:
             return reduce(
                 lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), prop
             )
+
         rule = reduce(
             lambda acc, x: And(acc, x),
             [
@@ -160,7 +165,6 @@ class Function:
             solver.add(z3.Not(prop.as_z3()))
             if solver.check().r == 1:
                 yield prop, solver
-
 
     def check(self) -> CheckResult:
         """

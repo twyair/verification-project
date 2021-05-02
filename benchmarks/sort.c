@@ -58,7 +58,7 @@ void insertion_sort(int arr[], int size) {
                 i > 0
                 && curr==arr[i]
                 && j < i
-                && forall(t, range(0, j + 1), arr[i] > arr[t])
+                && arr[i] > arr[j]
                 && forall(t, range(0, i - 1), arr[t] <= arr[t + 1])
             );
             j += 1;
@@ -68,13 +68,14 @@ void insertion_sort(int arr[], int size) {
             assert(
                 i > 0
                 && curr <= arr[j]
-                && arr[k] == arr[k - 1]
-                && forall(t, range(0, j), curr > arr[t])
+                && then(j > 0, curr > arr[j - 1])
                 && forall(t, range(0, i), arr[t] <= arr[t + 1])
             );
         }
-        assert(i > 0 && curr <= arr[j] && forall(t, range(0, j), curr > arr[t]) && forall(t, range(0, i), arr[t] <= arr[t + 1]));
         arr[j] = curr;
-        assert(i > 0 && forall(t, range(0, i), arr[t] <= arr[t + 1]));
+        assert(
+            i > 0
+            && forall(t, range(0, i), arr[t] <= arr[t + 1])
+        );
     }
 }
