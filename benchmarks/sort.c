@@ -4,7 +4,6 @@
 #define assert(x)
 #endif
 
-// doesn't work
 void bubble_sort(int arr[], int size) {
     requires(size > 0);
     ensures(forall(k, range(0, size - 1), arr[k] <= arr[k + 1]));
@@ -21,6 +20,8 @@ void bubble_sort(int arr[], int size) {
                     k, range(size - j, size),
                     forall(t, range(0, k), arr[t] <= arr[k])
                 )
+                && i >= 0
+                && i < size - j - 1
             );
         }
         assert(
