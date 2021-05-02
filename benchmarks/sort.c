@@ -46,7 +46,6 @@ void bubble_sort_sub(int arr[], int size) {
     }
 }
 
-// doesn't work
 void insertion_sort(int arr[], int size) {
     requires(size > 0);
     ensures(forall(k, range(0, size - 1), arr[k] <= arr[k + 1]));
@@ -60,6 +59,7 @@ void insertion_sort(int arr[], int size) {
                 && j < i
                 && arr[i] > arr[j]
                 && forall(t, range(0, i - 1), arr[t] <= arr[t + 1])
+                && j >= 0
             );
             j += 1;
         }
@@ -70,6 +70,7 @@ void insertion_sort(int arr[], int size) {
                 && curr <= arr[j]
                 && then(j > 0, curr > arr[j - 1])
                 && forall(t, range(0, i), arr[t] <= arr[t + 1])
+                && j >= 0
             );
         }
         arr[j] = curr;
