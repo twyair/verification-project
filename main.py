@@ -1,14 +1,13 @@
-from dataclasses import dataclass
 import json
-from typing import Dict, List, Optional
-from functools import reduce
 import os
+from dataclasses import dataclass
+from functools import reduce
+from typing import Dict, List, Optional
 
-from pygraphviz.agraph import AGraph
 import z3
+from pygraphviz.agraph import AGraph
 
-from expr import BinBoolExpr, Environment, GenericExpr, VarExpr, Prop, ForAll
-from cast import AstNode, parse, AstType
+from cast import AstNode, AstType, parse
 from cfg import (
     AssertNode,
     AssignmentNode,
@@ -20,6 +19,7 @@ from cfg import (
     StartNode,
     create_cfg,
 )
+from expr import BinBoolExpr, Environment, ForAll, GenericExpr, Prop, Type, VarExpr
 
 
 @dataclass
@@ -89,8 +89,8 @@ def get_functions(filename: str) -> Dict[str, "Function"]:
 class Function:
     name: str
     cfg: CfgNode
-    params: Dict[str, str]
-    vars: Dict[str, str]
+    params: Dict[str, Type]
+    vars: Dict[str, Type]
 
     @staticmethod
     def from_ast(ast: AstNode) -> "Function":
@@ -104,7 +104,7 @@ class Function:
         assert ret_type is not None
         env = Environment.empty()
         if ret_type != "void":
-            env["ret"] = ret_type
+            env["ret"] = Type(ret_type)
         params = declarator[2]
         if params.type == AstType.parameter_list:
             for p in params.children:
@@ -122,7 +122,7 @@ class Function:
                         name = p[1][0].text
                         ty = "array_" + ty
                     assert name is not None
-                    env[name] = ty
+                    env[name] = Type(ty)
         params = env.get_vars()
         requires = find_ensures(ast, "requires")
         if requires is not None:

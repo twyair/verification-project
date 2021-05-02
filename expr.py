@@ -1,5 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
+import enum
 from typing import (
     Any,
     Callable,
@@ -15,7 +16,14 @@ from cast import AstType, AstNode
 import z3
 
 
-Type = str
+@enum.unique
+class Type(enum.Enum):
+    int = "int"
+    float = "float"
+    bool = "bool"
+    array_int = "array_int"
+    array_float = "array_float"
+    array_bool = "array_bool"
 
 
 @dataclass
@@ -31,13 +39,13 @@ class Environment:
             scopes=[{}], vars={}, names_count=defaultdict(lambda: 0), renamer=[{}],
         )
 
-    def __getitem__(self, var: str) -> str:
+    def __getitem__(self, var: str) -> Type:
         for scope in reversed(self.scopes):
             if var in scope:
                 return scope[var]
         assert False, f"{var} is not in the environment"
 
-    def __setitem__(self, var: str, type_: str) -> None:
+    def __setitem__(self, var: str, type_: Type) -> None:
         self.scopes[-1][var] = type_
         if self.names_count[var] > 0:
             self.renamer[-1][var] = f"{var}${self.names_count[var]}"
@@ -64,7 +72,7 @@ class Environment:
         self.scopes.pop()
         self.renamer.pop()
 
-    def get_vars(self) -> Dict[str, str]:
+    def get_vars(self) -> Dict[str, Type]:
         return self.vars.copy()
 
 
@@ -114,8 +122,7 @@ class GenericExpr:
                     var = args[0][0].text
                     domain = args[0][2]
                     if domain.type == AstType.IDENTIFIER:
-                        domain = domain.text
-                        assert domain is not None
+                        domain = Type(domain.text)
                     else:
                         domain = (
                             GenericExpr.from_ast(domain[2][0], env),
@@ -123,7 +130,7 @@ class GenericExpr:
                         )
                     assert var is not None
                     env.open_scope()
-                    ty = domain if isinstance(domain, str) else "int"
+                    ty = domain if isinstance(domain, Type) else Type.int
                     env[var] = ty
                     # TODO: is there a better way to exclude quantified variables
                     del env.vars[env.rename(var)]
@@ -285,7 +292,7 @@ class Expr(GenericExpr):
 @dataclass(frozen=True)
 class VarExpr(Expr):
     var: str
-    type_: str
+    type_: Type
 
     def assign(self, vars: Dict[str, Expr]) -> Expr:
         return vars.get(self.var, self)
@@ -295,16 +302,18 @@ class VarExpr(Expr):
 
     def as_z3(self):
         # TODO: add more types
-        if self.type_ == "int":
+        if self.type_ == Type.int:
             return z3.Int(self.var)
-        elif self.type_ == "float":
+        elif self.type_ == Type.float:
             return z3.Const(self.var, z3.FloatDouble())
-        elif self.type_ == "bool":
+        elif self.type_ == Type.bool:
             return z3.Bool(self.var)
-        elif self.type_ == "array_int":
+        elif self.type_ == Type.array_int:
             return z3.Array(self.var, z3.IntSort(), z3.IntSort())
-        elif self.type_ == "array_bool":
+        elif self.type_ == Type.array_bool:
             return z3.Array(self.var, z3.IntSort(), z3.BoolSort())
+        elif self.type_ == Type.array_float:
+            return z3.Array(self.var, z3.IntSort(), z3.FloatDouble())
         else:
             assert False, f"unknown type: {self.type_}"
 
@@ -486,7 +495,7 @@ class Then(Prop):
 @dataclass(frozen=True)
 class ForAll(Prop):
     var: VarExpr
-    domain: Union[Tuple[GenericExpr, GenericExpr], str]
+    domain: Union[Tuple[GenericExpr, GenericExpr], Type]
     prop: GenericExpr
 
     def assign(self, vars: Dict[str, GenericExpr]) -> Prop:
@@ -500,14 +509,14 @@ class ForAll(Prop):
 
     def __str__(self) -> str:
         domain = (
-            self.domain
-            if isinstance(self.domain, str)
+            self.domain.value
+            if isinstance(self.domain, Type)
             else "({},{})".format(*self.domain)
         )
         return f"∀{self.var.var}∈{domain}.{self.prop}"
 
     def as_z3(self):
-        if isinstance(self.domain, str):
+        if isinstance(self.domain, Type):
             return z3.ForAll([self.var.as_z3()], self.prop.as_z3())
         else:
             var = self.var.as_z3()
@@ -523,7 +532,7 @@ class ForAll(Prop):
 @dataclass(frozen=True)
 class Exists(Prop):
     var: VarExpr
-    domain: Union[Tuple[GenericExpr, GenericExpr], str]
+    domain: Union[Tuple[GenericExpr, GenericExpr], Type]
     prop: GenericExpr
 
     def assign(self, vars: Dict[str, GenericExpr]) -> Prop:
@@ -537,14 +546,14 @@ class Exists(Prop):
 
     def __str__(self) -> str:
         domain = (
-            self.domain
-            if isinstance(self.domain, str)
+            self.domain.value
+            if isinstance(self.domain, Type)
             else "({},{})".format(*self.domain)
         )
         return f"∃{self.var.var}∈{domain}.{self.prop}"
 
     def as_z3(self):
-        if isinstance(self.domain, str):
+        if isinstance(self.domain, Type):
             return z3.Exists([self.var.as_z3()], self.prop.as_z3())
         else:
             var = self.var.as_z3()

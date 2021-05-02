@@ -11,6 +11,7 @@ from expr import (
     ArrayStore,
     Environment,
     GenericExpr,
+    Type,
     VarExpr,
     Prop,
     Then,
@@ -269,6 +270,7 @@ def statement_create_cfg(
         # TODO: what about array types?
         # TODO? more types?
         assert type_ is not None and type_ in ("int", "float", "bool",)
+        type_ = Type(type_)
         if ast[1].type != AstType.init_declarator:
             var = ast[1].text
             assert var is not None
