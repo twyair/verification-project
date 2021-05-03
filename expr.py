@@ -8,6 +8,7 @@ from typing import (
     Dict,
     List,
     ClassVar,
+    Optional,
     Tuple,
     Union,
 )
@@ -149,10 +150,17 @@ class GenericExpr:
                         assert False, f"unknown quantifier {quantifier}"
                 elif ast[0].text == "then":
                     args = ast[2]
-                    return Then(
-                        if_=GenericExpr.from_ast(args[0], env),
-                        then=GenericExpr.from_ast(args[2], env),
-                    )
+                    if args[0].type == AstType.argument_expression_list:
+                        return IfThenElse(
+                            if_=GenericExpr.from_ast(args[0][0], env),
+                            then=GenericExpr.from_ast(args[0][2], env),
+                            else_=GenericExpr.from_ast(args[2], env),
+                        )
+                    else:
+                        return Then(
+                            if_=GenericExpr.from_ast(args[0], env),
+                            then=GenericExpr.from_ast(args[2], env),
+                        )
                     # TODO? add an optional `else_` to `Then`
                 else:
                     assert False, f"unknown function {ast[0].text}"
@@ -423,13 +431,6 @@ class RealValue(Expr):
         return z3.FPVal(self.number)
 
 
-def NumericExpr(s: str) -> GenericExpr:
-    try:
-        return IntValue(int(s))
-    except ValueError:
-        return RealValue(float(s))
-
-
 @dataclass(frozen=True)
 class BoolValue(BoolExpr):
     value: bool
@@ -509,6 +510,10 @@ class Then(Prop):
 
     def as_z3(self):
         return z3.Implies(self.if_.as_z3(), self.then.as_z3())
+
+
+def IfThenElse(if_: GenericExpr, then: GenericExpr, else_: GenericExpr) -> GenericExpr:
+    return BinBoolExpr("&&", Then(if_, then), Then(NotBoolExpr(if_), else_))
 
 
 @dataclass(frozen=True)
