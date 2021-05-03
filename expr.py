@@ -8,7 +8,6 @@ from typing import (
     Dict,
     List,
     ClassVar,
-    Optional,
     Tuple,
     Union,
 )

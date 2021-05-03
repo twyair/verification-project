@@ -1,8 +1,4 @@
-#ifndef ANNOTATIONS
-#define requires(x)
-#define ensures(x)
-#define assert(x)
-#endif
+#include "common.h"
 
 void bubble_sort(int arr[], int size) {
     requires(size > 0);

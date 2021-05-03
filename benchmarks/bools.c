@@ -1,9 +1,4 @@
-#ifndef ANNOTATIONS
-#define requires(x)
-#define ensures(x)
-#define assert(x)
-#define freeze(x, y)
-#endif
+#include "common.h"
 
 bool de_morgan(bool x, bool y) {
     ensures(ret == (x && y));
