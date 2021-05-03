@@ -19,7 +19,7 @@ from cfg import (
     StartNode,
     create_cfg,
 )
-from expr import BinBoolExpr, Environment, ForAll, GenericExpr, Prop, Type, VarExpr
+from expr import And, Environment, ForAll, Expr, Prop, Type, Variable
 
 
 @dataclass
@@ -133,14 +133,14 @@ class Function:
             del vars[p]
         return Function(cfg=cfg, name=fn_name, vars=vars, params=params)
 
-    def get_proof_rule(self) -> GenericExpr:
-        def add_quantifiers(prop: GenericExpr) -> GenericExpr:
+    def get_proof_rule(self) -> Expr:
+        def add_quantifiers(prop: Expr) -> Expr:
             return reduce(
-                lambda acc, x: ForAll(VarExpr(*x), x[1], acc), self.vars.items(), prop
+                lambda acc, x: ForAll(Variable(*x), x[1], acc), self.vars.items(), prop
             )
 
         rule = reduce(
-            lambda acc, x: BinBoolExpr("&&", acc, x),
+            lambda acc, x: And(acc, x),
             [
                 path.get_proof_rule()
                 for path in self.cfg.generate_paths(BasicPath.empty(), frozenset())

@@ -77,8 +77,8 @@ class Environment:
 
 
 @dataclass(frozen=True)
-class GenericExpr:
-    def assign(self, vars: Dict[str, "GenericExpr"]) -> "GenericExpr":
+class Expr:
+    def assign(self, vars: Dict[str, "Expr"]) -> "Expr":
         raise NotImplementedError
 
     def __str__(self) -> str:
@@ -88,31 +88,24 @@ class GenericExpr:
         raise NotImplementedError
 
     @staticmethod
-    def from_ast(ast: AstNode, env: Environment) -> "GenericExpr":
+    def from_ast(ast: AstNode, env: Environment) -> "Expr":
         if ast.type in (AstType.relational_expression, AstType.equality_expression):
             lhs, op, rhs = ast.children
             assert op.text is not None
             return RelExpr(
                 operator=op.text,
-                lhs=GenericExpr.from_ast(lhs, env),
-                rhs=GenericExpr.from_ast(rhs, env),
+                lhs=Expr.from_ast(lhs, env),
+                rhs=Expr.from_ast(rhs, env),
             )
         elif ast.type == AstType.IDENTIFIER:
             assert ast.text is not None
-            return VarExpr(env.rename(ast.text), env[ast.text])
-        elif ast.type in (
-            AstType.logical_and_expression,
-            AstType.logical_or_expression,
-        ):
-            operator = ast[1].text
-            assert operator is not None
-            return BinBoolExpr(
-                operator=operator,
-                lhs=GenericExpr.from_ast(ast[0], env),
-                rhs=GenericExpr.from_ast(ast[2], env),
-            )
+            return Variable(env.rename(ast.text), env[ast.text])
+        elif ast.type == AstType.logical_and_expression:
+            return And(lhs=Expr.from_ast(ast[0], env), rhs=Expr.from_ast(ast[2], env),)
+        elif ast.type == AstType.logical_or_expression:
+            return Or(lhs=Expr.from_ast(ast[0], env), rhs=Expr.from_ast(ast[2], env),)
         elif ast.type == AstType.primary_expression:
-            return GenericExpr.from_ast(ast[1], env)
+            return Expr.from_ast(ast[1], env)
         elif ast.type == AstType.postfix_expression:
             if ast[1].type == AstType.paren_left and ast[0].type == AstType.IDENTIFIER:
                 assert ast[0].text is not None
@@ -125,8 +118,8 @@ class GenericExpr:
                         domain = Type(domain.text)
                     else:
                         domain = (
-                            GenericExpr.from_ast(domain[2][0], env),
-                            GenericExpr.from_ast(domain[2][2], env),
+                            Expr.from_ast(domain[2][0], env),
+                            Expr.from_ast(domain[2][2], env),
                         )
                     assert var is not None
                     env.open_scope()
@@ -134,16 +127,16 @@ class GenericExpr:
                     env[var] = ty
                     # TODO: is there a better way to exclude quantified variables
                     del env.vars[env.rename(var)]
-                    prop = GenericExpr.from_ast(args[2], env)
+                    prop = Expr.from_ast(args[2], env)
                     var_name = env.rename(var)
                     env.close_scope()
                     if quantifier == "forall":
                         return ForAll(
-                            var=VarExpr(var_name, ty), domain=domain, prop=prop
+                            var=Variable(var_name, ty), domain=domain, prop=prop
                         )
                     elif quantifier == "exists":
                         return Exists(
-                            var=VarExpr(var_name, ty), domain=domain, prop=prop
+                            var=Variable(var_name, ty), domain=domain, prop=prop
                         )
                     else:
                         assert False, f"unknown quantifier {quantifier}"
@@ -151,14 +144,14 @@ class GenericExpr:
                     args = ast[2]
                     if args[0].type == AstType.argument_expression_list:
                         return IfThenElse(
-                            GenericExpr.from_ast(args[0][0], env),
-                            GenericExpr.from_ast(args[0][2], env),
-                            GenericExpr.from_ast(args[2], env),
+                            Expr.from_ast(args[0][0], env),
+                            Expr.from_ast(args[0][2], env),
+                            Expr.from_ast(args[2], env),
                         )
                     else:
                         return Then(
-                            if_=GenericExpr.from_ast(args[0], env),
-                            then=GenericExpr.from_ast(args[2], env),
+                            if_=Expr.from_ast(args[0], env),
+                            then=Expr.from_ast(args[2], env),
                         )
                     # TODO? add an optional `else_` to `Then`
                 else:
@@ -166,8 +159,7 @@ class GenericExpr:
 
             assert ast[1].type == AstType.bracket_left
             return ArraySelect(
-                array=GenericExpr.from_ast(ast[0], env),
-                index=Expr.from_ast(ast[2], env),
+                array=Expr.from_ast(ast[0], env), index=Expr.from_ast(ast[2], env),
             )
         elif ast.type == AstType.CONSTANT:
             assert ast.text is not None
@@ -186,38 +178,33 @@ class GenericExpr:
             AstType.inclusive_or_expression,
         ):
             assert ast[1].text is not None
-            return BinExpr(
+            return BinaryExpr(
                 operator=ast[1].text,
-                lhs=GenericExpr.from_ast(ast[0], env),
-                rhs=GenericExpr.from_ast(ast[2], env),
+                lhs=Expr.from_ast(ast[0], env),
+                rhs=Expr.from_ast(ast[2], env),
             )
         elif ast.type == AstType.unary_expression:
             op = ast[0].text
             assert op is not None
             if op == "!":
-                return NotBoolExpr(BoolExpr.from_ast(ast[1], env))
+                return Not(Expr.from_ast(ast[1], env))
             else:
                 return UnaryExpr(operator=op, operand=Expr.from_ast(ast[1], env))
         elif ast.type == AstType.conditional_expression:
             return IfThenElse(
-                condition=GenericExpr.from_ast(ast[0], env),
-                value_true=GenericExpr.from_ast(ast[2], env),
-                value_false=GenericExpr.from_ast(ast[4], env),
+                condition=Expr.from_ast(ast[0], env),
+                value_true=Expr.from_ast(ast[2], env),
+                value_false=Expr.from_ast(ast[4], env),
             )
         else:
             assert False, f"unknown type {ast.type.value}"
 
 
 @dataclass(frozen=True)
-class BoolExpr(GenericExpr):
-    pass
-
-
-@dataclass(frozen=True)
-class RelExpr(BoolExpr):
+class RelExpr(Expr):
     operator: str  # == != < <= > >=
-    lhs: GenericExpr
-    rhs: GenericExpr
+    lhs: Expr
+    rhs: Expr
 
     SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any, Any], Any]]] = {
         "==": operator.eq,
@@ -227,68 +214,63 @@ class RelExpr(BoolExpr):
         ">": operator.gt,
         ">=": operator.ge,
     }
+    SYM2PRETTY: ClassVar[Dict[str, str]] = {"<=": "≤", ">=": "≥", "==": "=", "!=": "≠"}
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "RelExpr":
+    def assign(self, vars: Dict[str, Expr]) -> "RelExpr":
         return RelExpr(
             operator=self.operator, lhs=self.lhs.assign(vars), rhs=self.rhs.assign(vars)
         )
 
     def __str__(self) -> str:
-        op = {"<=": "≤", ">=": "≥", "==": "=", "!=": "≠"}.get(
-            self.operator, self.operator
-        )
+        op = self.SYM2PRETTY.get(self.operator, self.operator)
         return f"{self.lhs} {op} {self.rhs}"
 
     def as_z3(self) -> z3.ExprRef:
         return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
 
 
-@dataclass(frozen=True)
-class BinBoolExpr(BoolExpr):
-    operator: str  # && ||
-    lhs: GenericExpr
-    rhs: GenericExpr
+@dataclass
+class And(Expr):
+    lhs: Expr
+    rhs: Expr
 
-    SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any, Any], Any]]] = {
-        "&&": z3.And,
-        "||": z3.Or,
-    }
-
-    def assign(self, vars: Dict[str, GenericExpr]) -> "BinBoolExpr":
-        return BinBoolExpr(
-            operator=self.operator, rhs=self.rhs.assign(vars), lhs=self.lhs.assign(vars)
-        )
+    def assign(self, vars: Dict[str, Expr]) -> "And":
+        return And(rhs=self.rhs.assign(vars), lhs=self.lhs.assign(vars))
 
     def __str__(self) -> str:
-        if self.operator == "&&":
-            return " ∧ ".join(
-                f"{p}"
-                if isinstance(p, BinBoolExpr)
-                and p.operator == "&&"
-                or isinstance(p, NotBoolExpr)
-                else f"({p})"
-                for p in [self.lhs, self.rhs]
-            )
-        elif self.operator == "||":
-            return " ∨ ".join(
-                f"{p}"
-                if isinstance(p, BinBoolExpr) or isinstance(p, NotBoolExpr)
-                else f"({p})"
-                for p in [self.lhs, self.rhs]
-            )
-        else:
-            assert False
+        return " ∧ ".join(
+            f"{p}" if isinstance(p, (And, Not, Variable, BoolValue)) else f"({p})"
+            for p in [self.lhs, self.rhs]
+        )
 
-    def as_z3(self) -> z3.ExprRef:
-        return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
+    def as_z3(self):
+        return z3.And(self.lhs.as_z3(), self.rhs.as_z3())
+
+
+@dataclass
+class Or(Expr):
+    lhs: Expr
+    rhs: Expr
+
+    def assign(self, vars: Dict[str, Expr]) -> "Or":
+        return Or(rhs=self.rhs.assign(vars), lhs=self.lhs.assign(vars))
+
+    def __str__(self) -> str:
+        return " ∨ ".join(
+            f"{p}" if isinstance(p, (And, Or, Not, Variable, BoolValue)) else f"({p})"
+            for p in [self.lhs, self.rhs]
+        )
+
+    def as_z3(self):
+        return z3.Or(self.lhs.as_z3(), self.rhs.as_z3())
 
 
 @dataclass(frozen=True)
-class NotBoolExpr(BoolExpr):
-    operand: GenericExpr
+class Not(Expr):
+    operand: Expr
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "NotBoolExpr":
-        return NotBoolExpr(operand=self.operand.assign(vars))
+    def assign(self, vars: Dict[str, Expr]) -> "Not":
+        return Not(operand=self.operand.assign(vars))
 
     def __str__(self) -> str:
         return f"¬({self.operand})"
@@ -298,16 +280,11 @@ class NotBoolExpr(BoolExpr):
 
 
 @dataclass(frozen=True)
-class Expr(GenericExpr):
-    pass
-
-
-@dataclass(frozen=True)
-class VarExpr(Expr):
+class Variable(Expr):
     var: str
     type_: Type
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> GenericExpr:
+    def assign(self, vars: Dict[str, Expr]) -> Expr:
         return vars.get(self.var, self)
 
     def __str__(self) -> str:
@@ -333,10 +310,10 @@ class VarExpr(Expr):
 
 
 @dataclass(frozen=True)
-class BinExpr(Expr):
+class BinaryExpr(Expr):
     operator: str  # + - * / % << >> ^ & |
-    lhs: GenericExpr
-    rhs: GenericExpr
+    lhs: Expr
+    rhs: Expr
 
     SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any, Any], Any]]] = {
         "+": operator.add,
@@ -351,8 +328,8 @@ class BinExpr(Expr):
         # "<<": operator.lshift,
     }
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "BinExpr":
-        return BinExpr(
+    def assign(self, vars: Dict[str, Expr]) -> "BinaryExpr":
+        return BinaryExpr(
             operator=self.operator, rhs=self.rhs.assign(vars), lhs=self.lhs.assign(vars)
         )
 
@@ -361,7 +338,7 @@ class BinExpr(Expr):
             return (
                 (
                     f"({self.lhs})"
-                    if isinstance(self.lhs, BinExpr) and self.lhs.operator in "+-"
+                    if isinstance(self.lhs, BinaryExpr) and self.lhs.operator in "+-"
                     else f"{self.lhs}"
                 )
                 + " "
@@ -369,7 +346,7 @@ class BinExpr(Expr):
                 + " "
                 + (
                     f"({self.rhs})"
-                    if isinstance(self.rhs, BinExpr)
+                    if isinstance(self.rhs, BinaryExpr)
                     and self.rhs.operator != self.operator
                     else f"{self.rhs}"
                 )
@@ -386,7 +363,7 @@ class BinExpr(Expr):
 @dataclass(frozen=True)
 class UnaryExpr(Expr):
     operator: str  # + - ~
-    operand: GenericExpr
+    operand: Expr
 
     SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any], Any]]] = {
         "+": operator.pos,
@@ -394,13 +371,13 @@ class UnaryExpr(Expr):
         # "~": operator.inv,
     }
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "UnaryExpr":
+    def assign(self, vars: Dict[str, Expr]) -> "UnaryExpr":
         return UnaryExpr(operator=self.operator, operand=self.operand.assign(vars))
 
     def __str__(self) -> str:
         return self.operator + (
             f"({self.operand})"
-            if isinstance(self.operand, BinExpr)
+            if isinstance(self.operand, BinaryExpr)
             else f"{self.operand}"
         )
 
@@ -412,7 +389,7 @@ class UnaryExpr(Expr):
 class IntValue(Expr):
     number: int
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "IntValue":
+    def assign(self, vars: Dict[str, Expr]) -> "IntValue":
         return self
 
     def __str__(self) -> str:
@@ -426,7 +403,7 @@ class IntValue(Expr):
 class RealValue(Expr):
     number: float
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "RealValue":
+    def assign(self, vars: Dict[str, Expr]) -> "RealValue":
         return self
 
     def __str__(self) -> str:
@@ -437,10 +414,10 @@ class RealValue(Expr):
 
 
 @dataclass(frozen=True)
-class BoolValue(BoolExpr):
+class BoolValue(Expr):
     value: bool
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "BoolValue":
+    def assign(self, vars: Dict[str, Expr]) -> "BoolValue":
         return self
 
     def __str__(self) -> str:
@@ -451,12 +428,12 @@ class BoolValue(BoolExpr):
 
 
 @dataclass(frozen=True)
-class IfThenElse(GenericExpr):
-    condition: GenericExpr
-    value_true: GenericExpr
-    value_false: GenericExpr
+class IfThenElse(Expr):
+    condition: Expr
+    value_true: Expr
+    value_false: Expr
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "IfThenElse":
+    def assign(self, vars: Dict[str, Expr]) -> "IfThenElse":
         return IfThenElse(
             condition=self.condition.assign(vars),
             value_true=self.value_true.assign(vars),
@@ -474,11 +451,11 @@ class IfThenElse(GenericExpr):
 
 @dataclass(frozen=True)
 class ArrayStore(Expr):
-    array: GenericExpr
-    index: GenericExpr
-    value: GenericExpr
+    array: Expr
+    index: Expr
+    value: Expr
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "ArrayStore":
+    def assign(self, vars: Dict[str, Expr]) -> "ArrayStore":
         return ArrayStore(
             array=self.array.assign(vars),
             index=self.index.assign(vars),
@@ -494,10 +471,10 @@ class ArrayStore(Expr):
 
 @dataclass(frozen=True)
 class ArraySelect(Expr):
-    array: GenericExpr
-    index: GenericExpr
+    array: Expr
+    index: Expr
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "ArraySelect":
+    def assign(self, vars: Dict[str, Expr]) -> "ArraySelect":
         return ArraySelect(array=self.array.assign(vars), index=self.index.assign(vars))
 
     def __str__(self) -> str:
@@ -508,8 +485,8 @@ class ArraySelect(Expr):
 
 
 @dataclass(frozen=True)
-class Prop(GenericExpr):
-    def assign(self, vars: Dict[str, GenericExpr]) -> "Prop":
+class Prop(Expr):
+    def assign(self, vars: Dict[str, Expr]) -> "Prop":
         raise NotImplementedError
 
     def __str__(self) -> str:
@@ -521,10 +498,10 @@ class Prop(GenericExpr):
 
 @dataclass(frozen=True)
 class Then(Prop):
-    if_: GenericExpr
-    then: GenericExpr
+    if_: Expr
+    then: Expr
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> Prop:
+    def assign(self, vars: Dict[str, Expr]) -> Prop:
         return Then(if_=self.if_.assign(vars), then=self.then.assign(vars))
 
     def __str__(self) -> str:
@@ -541,11 +518,11 @@ class Then(Prop):
 
 @dataclass(frozen=True)
 class ForAll(Prop):
-    var: VarExpr
-    domain: Union[Tuple[GenericExpr, GenericExpr], Type]
-    prop: GenericExpr
+    var: Variable
+    domain: Union[Tuple[Expr, Expr], Type]
+    prop: Expr
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> Prop:
+    def assign(self, vars: Dict[str, Expr]) -> Prop:
         if self.var in vars:
             vars = vars.copy()
             del vars[self.var.var]
@@ -578,11 +555,11 @@ class ForAll(Prop):
 
 @dataclass(frozen=True)
 class Exists(Prop):
-    var: VarExpr
-    domain: Union[Tuple[GenericExpr, GenericExpr], Type]
-    prop: GenericExpr
+    var: Variable
+    domain: Union[Tuple[Expr, Expr], Type]
+    prop: Expr
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> Prop:
+    def assign(self, vars: Dict[str, Expr]) -> Prop:
         if self.var in vars:
             vars = vars.copy()
             del vars[self.var.var]
