@@ -434,7 +434,7 @@ class IfThenElse(Expr):
         )
 
     def __str__(self) -> str:
-        return f"({self.condition}?{self.value_true}:{self.value_false})"
+        return f"({self.condition}?{{{self.value_true}}}:{{{self.value_false}}})"
 
     def as_z3(self):
         return z3.If(
@@ -569,7 +569,7 @@ class Exists(Prop):
             var = self.var.as_z3()
             return z3.Exists(
                 [var],
-                z3.Implies(
+                z3.And(
                     z3.And(var >= self.domain[0].as_z3(), var < self.domain[1].as_z3()),
                     self.prop.as_z3(),
                 ),

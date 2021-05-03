@@ -123,7 +123,7 @@ class Function:
             prop = path.get_proof_rule()
             solver = z3.Solver()
             solver.add(z3.Not(prop.as_z3()))
-            if solver.check().r == 1:
+            if solver.check().r != -1:
                 for x in props:
                     if x == prop:
                         break
