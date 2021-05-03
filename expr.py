@@ -166,8 +166,10 @@ class GenericExpr:
             assert ast.text is not None
             if ast.text in ("true", "false",):
                 return BoolValue(ast.text == "true")
+            elif ast.text.isnumeric():
+                return IntValue(int(ast.text))
             else:
-                return NumericExpr(ast.text)
+                return RealValue(float(ast.text))
         elif ast.type in (
             AstType.additive_expression,
             AstType.multiplicative_expression,
@@ -195,8 +197,7 @@ class GenericExpr:
 
 @dataclass(frozen=True)
 class BoolExpr(GenericExpr):
-    def assign(self, vars: Dict[str, GenericExpr]) -> "BoolExpr":
-        raise NotImplementedError
+    pass
 
 
 @dataclass(frozen=True)
@@ -225,7 +226,7 @@ class RelExpr(BoolExpr):
         )
         return f"{self.lhs} {op} {self.rhs}"
 
-    def as_z3(self):
+    def as_z3(self) -> z3.ExprRef:
         return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
 
 
@@ -265,7 +266,7 @@ class BinBoolExpr(BoolExpr):
         else:
             assert False
 
-    def as_z3(self):
+    def as_z3(self) -> z3.ExprRef:
         return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
 
 
@@ -285,8 +286,7 @@ class NotBoolExpr(BoolExpr):
 
 @dataclass(frozen=True)
 class Expr(GenericExpr):
-    def assign(self, vars: Dict[str, GenericExpr]) -> "Expr":
-        raise NotImplementedError
+    pass
 
 
 @dataclass(frozen=True)
@@ -294,18 +294,19 @@ class VarExpr(Expr):
     var: str
     type_: Type
 
-    def assign(self, vars: Dict[str, Expr]) -> Expr:
+    def assign(self, vars: Dict[str, GenericExpr]) -> GenericExpr:
         return vars.get(self.var, self)
 
     def __str__(self) -> str:
         return self.var
 
-    def as_z3(self):
+    def as_z3(self) -> z3.ExprRef:
         # TODO: add more types
         if self.type_ == Type.int:
             return z3.Int(self.var)
         elif self.type_ == Type.float:
-            return z3.Const(self.var, z3.FloatDouble())
+            # TODO: properly determine the fp sort
+            return z3.FP(self.var, z3.FloatDouble())
         elif self.type_ == Type.bool:
             return z3.Bool(self.var)
         elif self.type_ == Type.array_int:
@@ -365,7 +366,7 @@ class BinExpr(Expr):
         else:
             assert False
 
-    def as_z3(self):
+    def as_z3(self) -> z3.ExprRef:
         return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
 
 
@@ -390,25 +391,43 @@ class UnaryExpr(Expr):
             else f"{self.operand}"
         )
 
-    def as_z3(self):
+    def as_z3(self) -> z3.ExprRef:
         return self.SYM2OPERATOR[self.operator](self.operand.as_z3())
 
 
 @dataclass(frozen=True)
-class NumericExpr(Expr):
-    number: str
+class IntValue(Expr):
+    number: int
 
-    def assign(self, vars: Dict[str, GenericExpr]) -> "NumericExpr":
+    def assign(self, vars: Dict[str, GenericExpr]) -> "IntValue":
         return self
 
     def __str__(self) -> str:
         return f"{self.number}"
 
-    def as_z3(self):
-        try:
-            return z3.IntVal(int(self.number))
-        except ValueError:
-            return float(self.number)
+    def as_z3(self) -> z3.ExprRef:
+        return z3.IntVal(int(self.number))
+
+
+@dataclass(frozen=True)
+class RealValue(Expr):
+    number: float
+
+    def assign(self, vars: Dict[str, GenericExpr]) -> "RealValue":
+        return self
+
+    def __str__(self) -> str:
+        return f"{self.number}"
+
+    def as_z3(self) -> z3.ExprRef:
+        return z3.FPVal(self.number)
+
+
+def NumericExpr(s: str) -> GenericExpr:
+    try:
+        return IntValue(int(s))
+    except ValueError:
+        return RealValue(float(s))
 
 
 @dataclass(frozen=True)
@@ -421,8 +440,8 @@ class BoolValue(BoolExpr):
     def __str__(self) -> str:
         return f"{self.value}"
 
-    def as_z3(self):
-        return self.value
+    def as_z3(self) -> z3.ExprRef:
+        return z3.BoolVal(self.value)
 
 
 @dataclass(frozen=True)
@@ -441,7 +460,7 @@ class ArrayStore(Expr):
     def __str__(self) -> str:
         return f"Store({self.array}, {self.index}, {self.value})"
 
-    def as_z3(self):
+    def as_z3(self) -> z3.ExprRef:
         return z3.Store(self.array.as_z3(), self.index.as_z3(), self.value.as_z3())
 
 
@@ -456,7 +475,7 @@ class ArraySelect(Expr):
     def __str__(self) -> str:
         return f"{self.array}[{self.index}]"
 
-    def as_z3(self):
+    def as_z3(self) -> z3.ExprRef:
         return z3.Select(self.array.as_z3(), self.index.as_z3())
 
 
