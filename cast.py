@@ -95,7 +95,7 @@ class AstType(enum.Enum):
     argument_expression_list = "argument_expression_list"
 
 
-@dataclass
+@dataclass(frozen=True)
 class AstRange:
     startLineNumber: int
     startColumn: int
@@ -103,7 +103,7 @@ class AstRange:
     endColumn: int
 
 
-@dataclass
+@dataclass(frozen=True)
 class AstNode:
     text: Optional[str]
     type: AstType

@@ -22,24 +22,24 @@ from cfg import (
 from expr import And, Environment, ForAll, Expr, Prop, Type, Variable
 
 
-@dataclass
+@dataclass(frozen=True)
 class CheckResult:
     def is_sat(self) -> bool:
         return False
 
 
-@dataclass
+@dataclass(frozen=True)
 class Unknown(CheckResult):
     code: int
 
 
-@dataclass
+@dataclass(frozen=True)
 class Sat(CheckResult):
     def is_sat(self) -> bool:
         return True
 
 
-@dataclass
+@dataclass(frozen=True)
 class Unsat(CheckResult):
     model: z3.ModelRef
 
@@ -85,7 +85,7 @@ def get_functions(filename: str) -> Dict[str, "Function"]:
     }
 
 
-@dataclass
+@dataclass(frozen=True)
 class Function:
     name: str
     cfg: CfgNode
@@ -126,7 +126,7 @@ class Function:
         params = env.get_vars()
         requires = find_ensures(ast, "requires")
         if requires is not None:
-            requires = Prop.from_ast(requires, env)
+            requires = Expr.from_ast(requires, env)
         cfg = create_cfg(ast, requires, env)
         vars = env.get_vars()
         for p in params:

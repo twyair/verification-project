@@ -26,7 +26,7 @@ class Type(enum.Enum):
     array_bool = "array_bool"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Environment:
     scopes: List[Dict[str, Type]]
     vars: Dict[str, Type]
@@ -229,7 +229,7 @@ class RelExpr(Expr):
         return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
 
 
-@dataclass
+@dataclass(frozen=True)
 class And(Expr):
     lhs: Expr
     rhs: Expr
@@ -247,7 +247,7 @@ class And(Expr):
         return z3.And(self.lhs.as_z3(), self.rhs.as_z3())
 
 
-@dataclass
+@dataclass(frozen=True)
 class Or(Expr):
     lhs: Expr
     rhs: Expr
@@ -486,14 +486,7 @@ class ArraySelect(Expr):
 
 @dataclass(frozen=True)
 class Prop(Expr):
-    def assign(self, vars: Dict[str, Expr]) -> "Prop":
-        raise NotImplementedError
-
-    def __str__(self) -> str:
-        raise NotImplementedError
-
-    def as_z3(self):
-        raise NotImplementedError
+    pass
 
 
 @dataclass(frozen=True)

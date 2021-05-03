@@ -20,7 +20,7 @@ from expr import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class BasicPath:
     reachability: List[Expr]
     transformation: Dict[str, Expr]
@@ -295,7 +295,7 @@ def statement_create_cfg(
                 return AssertNode(assertion=assertion, next_node=next_node,)
             elif ast[0][0].text == "ensures":
                 assert end_node.assertion is None
-                end_node.assertion = Prop.from_ast(ast[0][2], env)
+                end_node.assertion = Expr.from_ast(ast[0][2], env)
                 return next_node
             elif ast[0][0].text == "requires":
                 return next_node
