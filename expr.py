@@ -151,9 +151,9 @@ class GenericExpr:
                     args = ast[2]
                     if args[0].type == AstType.argument_expression_list:
                         return IfThenElse(
-                            if_=GenericExpr.from_ast(args[0][0], env),
-                            then=GenericExpr.from_ast(args[0][2], env),
-                            else_=GenericExpr.from_ast(args[2], env),
+                            GenericExpr.from_ast(args[0][0], env),
+                            GenericExpr.from_ast(args[0][2], env),
+                            GenericExpr.from_ast(args[2], env),
                         )
                     else:
                         return Then(
@@ -198,6 +198,12 @@ class GenericExpr:
                 return NotBoolExpr(BoolExpr.from_ast(ast[1], env))
             else:
                 return UnaryExpr(operator=op, operand=Expr.from_ast(ast[1], env))
+        elif ast.type == AstType.conditional_expression:
+            return IfThenElse(
+                condition=GenericExpr.from_ast(ast[0], env),
+                value_true=GenericExpr.from_ast(ast[2], env),
+                value_false=GenericExpr.from_ast(ast[4], env),
+            )
         else:
             assert False, f"unknown type {ast.type.value}"
 
@@ -445,6 +451,28 @@ class BoolValue(BoolExpr):
 
 
 @dataclass(frozen=True)
+class IfThenElse(GenericExpr):
+    condition: GenericExpr
+    value_true: GenericExpr
+    value_false: GenericExpr
+
+    def assign(self, vars: Dict[str, GenericExpr]) -> "IfThenElse":
+        return IfThenElse(
+            condition=self.condition.assign(vars),
+            value_true=self.value_true.assign(vars),
+            value_false=self.value_false.assign(vars),
+        )
+
+    def __str__(self) -> str:
+        return f"({self.condition}?{self.value_true}:{self.value_false})"
+
+    def as_z3(self):
+        return z3.If(
+            self.condition.as_z3(), self.value_true.as_z3(), self.value_false.as_z3()
+        )
+
+
+@dataclass(frozen=True)
 class ArrayStore(Expr):
     array: GenericExpr
     index: GenericExpr
@@ -509,10 +537,6 @@ class Then(Prop):
 
     def as_z3(self):
         return z3.Implies(self.if_.as_z3(), self.then.as_z3())
-
-
-def IfThenElse(if_: GenericExpr, then: GenericExpr, else_: GenericExpr) -> GenericExpr:
-    return BinBoolExpr("&&", Then(if_, then), Then(NotBoolExpr(if_), else_))
 
 
 @dataclass(frozen=True)

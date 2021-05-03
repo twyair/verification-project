@@ -23,6 +23,8 @@ class AstType(enum.Enum):
     gt = ">"
     not_ = "!"
     neg = "~"
+    question_mark = "?"
+    colon = ":"
     EXTERN = "EXTERN"
     CONSTANT = "CONSTANT"  # V
     ELSE = "ELSE"
