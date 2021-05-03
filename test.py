@@ -1,5 +1,6 @@
-import main
 import unittest
+
+import main
 
 
 class VerifierTests(unittest.TestCase):

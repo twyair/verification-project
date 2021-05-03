@@ -1,19 +1,12 @@
+import enum
+import operator
 from collections import defaultdict
 from dataclasses import dataclass
-import enum
-from typing import (
-    Any,
-    Callable,
-    DefaultDict,
-    Dict,
-    List,
-    ClassVar,
-    Tuple,
-    Union,
-)
-import operator
-from cast import AstType, AstNode
+from typing import Any, Callable, ClassVar, DefaultDict, Dict, List, Tuple, Union
+
 import z3
+
+from cast import AstNode, AstType
 
 
 @enum.unique

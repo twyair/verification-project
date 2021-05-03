@@ -1,9 +1,10 @@
 from functools import reduce
 from itertools import chain
 from typing import Dict, FrozenSet, Iterator, List, Optional, Set
-from cast import AstNode, AstType
 from dataclasses import dataclass
 import dataclasses
+
+from cast import AstNode, AstType
 from expr import (
     ArraySelect,
     And,
