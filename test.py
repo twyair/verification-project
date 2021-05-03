@@ -2,7 +2,7 @@ import main
 import unittest
 
 
-class TestStringMethods(unittest.TestCase):
+class VerifierTests(unittest.TestCase):
     def test_array(self):
         fns = main.get_functions("array")
         self.assertTrue(fns["max3_array"].check().is_sat())

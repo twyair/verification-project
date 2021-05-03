@@ -49,31 +49,22 @@ void insertion_sort(int arr[], int size) {
     for (int i = 1; i < size; i += 1) {
         int curr = arr[i];
         int j = 0;
+        remember(i > 0 && j >= 0);
         while (arr[j] < arr[i] && j < i) {
             assert(
-                i > 0
-                && curr==arr[i]
+                curr==arr[i]
                 && j < i
                 && arr[i] > arr[j]
                 && forall(t, range(0, i - 1), arr[t] <= arr[t + 1])
-                && j >= 0
             );
             j += 1;
         }
+        remember(forall(t, range(0, i), arr[t] <= arr[t + 1]));
         for (int k = i; k > j; k -= 1) {
             arr[k] = arr[k - 1];
-            assert(
-                i > 0
-                && curr <= arr[j]
-                && then(j > 0, curr > arr[j - 1])
-                && forall(t, range(0, i), arr[t] <= arr[t + 1])
-                && j >= 0
-            );
+            assert(curr <= arr[j] && then(j > 0, curr > arr[j - 1]));
         }
         arr[j] = curr;
-        assert(
-            i > 0
-            && forall(t, range(0, i), arr[t] <= arr[t + 1])
-        );
+        assert(0 == 0);
     }
 }

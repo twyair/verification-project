@@ -1,4 +1,5 @@
 from functools import reduce
+from itertools import chain
 from typing import Dict, FrozenSet, Iterator, List, Optional, Set
 from cast import AstNode, AstType
 from dataclasses import dataclass
@@ -211,6 +212,7 @@ def statement_create_cfg(
     loop_start: Optional[CfgNode],
     loop_end: Optional[CfgNode],
     env: Environment,
+    remembers: List[List[GenericExpr]],
 ) -> CfgNode:
     if ast.type == AstType.semicolon:
         return next_node
@@ -220,22 +222,23 @@ def statement_create_cfg(
         return CondNode(
             condition=GenericExpr.from_ast(ast[2], env),
             true_br=statement_create_cfg(
-                ast[4], next_node, end_node, loop_start, loop_end, env
+                ast[4], next_node, end_node, loop_start, loop_end, env, remembers
             ),
             false_br=statement_create_cfg(
-                ast[6], next_node, end_node, loop_start, loop_end, env
+                ast[6], next_node, end_node, loop_start, loop_end, env, remembers
             )
             if len(ast.children) == 7
             else next_node,
         )
     elif ast.type == AstType.compound_statement:
         env.open_scope()
+        remembers.append([])
         statements: List[CfgNode] = []
         dummies: List[DummyNode] = []
         for s in ast[1].children:
             dummy = DummyNode()
             statement = statement_create_cfg(
-                s, dummy, end_node, loop_start, loop_end, env
+                s, dummy, end_node, loop_start, loop_end, env, remembers
             )
             if statement is not dummy:
                 dummies.append(dummy)
@@ -243,6 +246,7 @@ def statement_create_cfg(
         statements.append(next_node)
         for s, s_next, d in zip(statements, statements[1:], dummies):
             s.replace(d, s_next, set())
+        remembers.pop()
         env.close_scope()
         return statements[0]
     elif ast.type == AstType.jump_statement:
@@ -290,9 +294,13 @@ def statement_create_cfg(
                 and ast[0][0].type == AstType.IDENTIFIER
             )
             if ast[0][0].text == "assert":
-                return AssertNode(
-                    assertion=Prop.from_ast(ast[0][2], env), next_node=next_node
+                assertion = GenericExpr.from_ast(ast[0][2], env)
+                assertion = reduce(
+                    lambda acc, x: BinBoolExpr("&&", acc, x),
+                    chain.from_iterable(remembers),
+                    assertion,
                 )
+                return AssertNode(assertion=assertion, next_node=next_node,)
             elif ast[0][0].text == "ensures":
                 assert end_node.assertion is None
                 end_node.assertion = Prop.from_ast(ast[0][2], env)
@@ -309,6 +317,9 @@ def statement_create_cfg(
                 var = GenericExpr.from_ast(args[0], env)
                 assert isinstance(var, VarExpr)
                 return AssignmentNode(right, var, next_node)
+            elif ast[0][0].text == "remember":
+                remembers[-1].append(GenericExpr.from_ast(ast[0][2], env))
+                return next_node
             else:
                 assert False, f"unknown function {ast[0][0].text}"
 
@@ -342,6 +353,8 @@ def statement_create_cfg(
             assert False
     elif ast.type == AstType.iteration_statement:
         if ast[0].type == AstType.WHILE:
+            env.open_scope()
+            remembers.append([])
             while_node = CondNode(
                 GenericExpr.from_ast(ast[2], env), DummyNode(), next_node
             )
@@ -352,19 +365,35 @@ def statement_create_cfg(
                 loop_start=while_node,
                 loop_end=next_node,
                 env=env,
+                remembers=remembers,
             )
+            remembers.pop()
+            env.close_scope()
             return while_node
         elif ast[0].type == AstType.DO:
+            env.open_scope()
+            remembers.append([])
             cond = CondNode(GenericExpr.from_ast(ast[4], env), DummyNode(), next_node)
             cond.true_br = statement_create_cfg(
-                ast[1], cond, end_node, loop_start=cond, loop_end=next_node, env=env
+                ast[1],
+                cond,
+                end_node,
+                loop_start=cond,
+                loop_end=next_node,
+                env=env,
+                remembers=remembers,
             )
+            remembers.pop()
+            env.close_scope()
             return cond.true_br
         elif ast[0].type == AstType.FOR:
             # TODO: handle other cases e.g. `for(;;);`
             # for (decl; cond; inc) body
             env.open_scope()
-            decl = statement_create_cfg(ast[2], DummyNode(), end_node, None, None, env)
+            remembers.append([])
+            decl = statement_create_cfg(
+                ast[2], DummyNode(), end_node, None, None, env, remembers
+            )
             cond = CondNode(
                 GenericExpr.from_ast(ast[3][0], env), DummyNode(), next_node
             )
@@ -377,10 +406,18 @@ def statement_create_cfg(
                 None,
                 None,
                 env,
+                remembers,
             )
             cond.true_br = statement_create_cfg(
-                ast[6], inc, end_node, loop_start=cond, loop_end=next_node, env=env
+                ast[6],
+                inc,
+                end_node,
+                loop_start=cond,
+                loop_end=next_node,
+                env=env,
+                remembers=remembers,
             )
+            remembers.pop()
             env.close_scope()
             return decl
         else:
@@ -399,6 +436,6 @@ def create_cfg(
 
     end_node = EndNode(None)
     return StartNode(
-        requires, statement_create_cfg(body, end_node, end_node, None, None, env)
+        requires, statement_create_cfg(body, end_node, end_node, None, None, env, [])
     )
 
