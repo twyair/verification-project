@@ -46,7 +46,7 @@ void bubble_sort_sub(int arr[], int size) {
 void insertion_sort(int arr[], int size) {
     requires(size > 0);
     freeze(ARR, arr);
-    // specification is still incomplete (e.g. ARR=[0,0,1], arr=[0,1])
+    // specification is still incomplete (e.g. ARR=[0,0,1], arr=[0,1, 1])
     ensures(
         forall(k, range(0, size - 1), arr[k] <= arr[k + 1])
         && forall(k, range(0, size), exists(t, range(0, size), ARR[k] == arr[t]))
