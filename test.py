@@ -36,6 +36,13 @@ class VerifierTests(unittest.TestCase):
         self.assertTrue(fns["first_true"].check().is_sat())
         self.assertTrue(fns["flip_even"].check().is_sat())
 
+    def test_random(self):
+        fns = main.get_functions("random")
+        self.assertTrue(fns["is_prime"].check().is_sat())
+        self.assertTrue(fns["array_reverse"].check().is_sat())
+        self.assertTrue(fns["vector_add"].check().is_sat())
+        self.assertTrue(fns["sqrt_v1"].check().is_sat())
+
 
 if __name__ == "__main__":
     unittest.main()

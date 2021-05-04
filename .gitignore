@@ -1,3 +1,4 @@
 benchmarks/*.json
 benchmarks/test.c
 cfg-img/
+.vscode
