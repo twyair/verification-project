@@ -51,7 +51,6 @@ void insertion_sort(int arr[], int size) {
         forall(k, range(0, size - 1), arr[k] <= arr[k + 1])
         //&& forall(k, range(0, size), exists(t, range(0, size), ARR[k] == arr[t]))
     );
-    //remember(forall(k, range(0, size), exists(t, range(0, size), ARR[k] == arr[t])));
     for (int i = 1; i < size; i += 1) {
         int curr = arr[i];
         int j = 0;
@@ -62,15 +61,23 @@ void insertion_sort(int arr[], int size) {
                 && j < i
                 && arr[i] > arr[j]
                 && forall(t, range(0, i - 1), arr[t] <= arr[t + 1])
+                //&& forall(k, range(0, size), exists(t, range(0, size), ARR[k] == arr[t]))
             );
             j += 1;
         }
         remember(forall(t, range(0, i), arr[t] <= arr[t + 1]));
         for (int k = i; k > j; k -= 1) {
             arr[k] = arr[k - 1];
-            assert(curr <= arr[j] && then(j > 0, curr > arr[j - 1]));
+            assert(
+                curr <= arr[j]
+                && then(j > 0, curr > arr[j - 1])
+                //&& forall(r, range(0, size), then(ARR[r] != curr, exists(t, range(0, size), r != k && ARR[k] == arr[t])))
+            );
         }
         arr[j] = curr;
-        assert(0 == 0);
+        assert(
+            0 == 0
+            //forall(k, range(0, size), exists(t, range(0, size), ARR[k] == arr[t]))
+        );
     }
 }
