@@ -24,6 +24,9 @@ bool is_prime(int num) {
     return 0 == 0;
 }
 
+/* takes the root of a perfect square
+ * the result for non-perfect squares is `-1`
+ */
 int sqrt_v1(int num) {
     requires(num > 0);
     // doesn't work
@@ -38,6 +41,9 @@ int sqrt_v1(int num) {
     return -1;
 }
 
+/* takes the root of a perfect square
+ * the result for non-perfect squares is undefined
+ */
 int sqrt_v2(int num) {
     requires(num > 0);
     ensures(then(exists(k, range(1, num), k * k == num), ret * ret == num));
