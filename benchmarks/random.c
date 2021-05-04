@@ -39,9 +39,6 @@ bool is_prime(int num) {
     return 0 == 0;
 }
 
-/* takes the root of a perfect square
- * the result for a non-perfect square is `-1`
- */
 int sqrt_v1(int num) {
     requires(num > 0);
     // FIXME? doesnt work with `, ret == -1)`
