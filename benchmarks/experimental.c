@@ -25,7 +25,7 @@ bool is_prime(int num) {
 }
 
 /* takes the root of a perfect square
- * the result for non-perfect squares is `-1`
+ * the result for a non-perfect square is `-1`
  */
 int sqrt_v1(int num) {
     requires(num > 0);
@@ -66,4 +66,32 @@ int sqrt_v2(int num) {
     }
 
     return res;
+}
+
+// works
+void array_reverse(int arr[], int size) {
+    requires(size > 0);
+    freeze(ARR, arr);
+    ensures(forall(k, range(0, size), ARR[k] == arr[size - 1 - k]));
+    for (int i = 0; i < size / 2; i += 1) {
+        int tmp = arr[i];
+        arr[i] = arr[size - 1 - i];
+        arr[size - 1 - i] = tmp;
+        assert(
+            size > 0
+            && i >= 0
+            && forall(k, range(0, i + 1), arr[k] == ARR[size - 1 - k] && arr[size - 1 - k] == ARR[k])
+            && forall(k, range(i + 1, (size + 1) / 2), arr[k] == ARR[k] && arr[size - 1 - k] == ARR[size - 1 - k])
+        );
+    }
+}
+
+// TODO:
+void merge(int arr1[], int arr2[], int res[], int size1, int size2) {
+    requires(
+        size1 > 0 && size2 > 0
+        && forall(k, range(0, size1 - 1), arr1[k] <= arr1[k+1])
+        && forall(k, range(0, size2 - 1), arr2[k] <= arr2[k+1])
+    );
+    ensures(forall(k, range(size1 + size2 - 1), res[k] <= res[k+1]));
 }
