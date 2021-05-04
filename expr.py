@@ -311,7 +311,7 @@ class BinaryExpr(Expr):
     SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any, Any], Any]]] = {
         "+": operator.add,
         "-": operator.sub,
-        "/": operator.floordiv,
+        "/": operator.truediv,  # NOTE: truediv for z3 integer expressions performs integer division (floordiv isn't defined)
         "%": operator.mod,
         "*": operator.mul,
         # "^": operator.xor,
