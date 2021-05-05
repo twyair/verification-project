@@ -6,44 +6,68 @@ import main
 class VerifierTests(unittest.TestCase):
     def test_array(self):
         fns = main.get_functions("array")
-        self.assertTrue(fns["max3_array"].check().is_sat())
-        self.assertTrue(fns["max3_array_indirect"].check().is_sat())
-        self.assertTrue(fns["sort3"].check().is_sat())
+        for f in [
+            "max3_array",
+            "max3_array_indirect",
+            "sort3",
+        ]:
+            with self.subTest(f"test_{f} failed\n"):
+                self.assertTrue(fns[f].check().is_sat())
 
     def test_max3(self):
         fns = main.get_functions("max3")
-        self.assertTrue(fns["max3_v1"].check().is_sat())
-        self.assertTrue(fns["max3_v2"].check().is_sat())
-        self.assertTrue(fns["max3_v3"].check().is_sat())
+        for f in [
+            "max3_v1",
+            "max3_v2",
+            "max3_v3",
+        ]:
+            with self.subTest(f"test_{f} failed\n"):
+                self.assertTrue(fns[f].check().is_sat())
 
     def test_max(self):
         fns = main.get_functions("max")
-        self.assertTrue(fns["array_max"].check().is_sat())
-        self.assertTrue(fns["max2"].check().is_sat())
-        self.assertFalse(fns["max2_wrong"].check().is_sat())
-        self.assertTrue(fns["max2_float"].check().is_sat())
+        for f in [
+            "array_max",
+            "max2",
+            "max2_float",
+        ]:
+            with self.subTest(f"test_{f} failed\n"):
+                self.assertTrue(fns[f].check().is_sat())
+        self.assertFalse("max2_wrong")
 
     def test_sort(self):
         fns = main.get_functions("sort")
-        self.assertTrue(fns["bubble_sort_sub"].check().is_sat())
-        self.assertTrue(fns["insertion_sort"].check().is_sat())
-        self.assertTrue(fns["bubble_sort"].check().is_sat())
+        for f in [
+            "bubble_sort_sub",
+            "insertion_sort",
+            "bubble_sort",
+        ]:
+            with self.subTest(f"test_{f} failed\n"):
+                self.assertTrue(fns[f].check().is_sat())
 
     def test_bools(self):
         fns = main.get_functions("bools")
-        self.assertTrue(fns["de_morgan"].check().is_sat())
-        self.assertFalse(fns["de_morgan_bug"].check().is_sat())
-        self.assertTrue(fns["first_true"].check().is_sat())
-        self.assertTrue(fns["flip_even"].check().is_sat())
+        for f in [
+            "de_morgan",
+            "first_true",
+            "flip_even",
+        ]:
+            with self.subTest(f"test_{f} failed\n"):
+                self.assertTrue(fns[f].check().is_sat())
+        self.assertFalse("de_morgan_bug")
 
     def test_random(self):
         fns = main.get_functions("random")
-        self.assertTrue(fns["is_prime"].check().is_sat())
-        self.assertTrue(fns["array_reverse"].check().is_sat())
-        self.assertTrue(fns["vector_add"].check().is_sat())
-        self.assertTrue(fns["sqrt_v1"].check().is_sat())
-        self.assertTrue(fns["partition"].check().is_sat())
-        self.assertTrue(fns["mccarthy_91"].check().is_sat())
+        for f in [
+            "is_prime",
+            "array_reverse",
+            "vector_add",
+            "sqrt_v1",
+            "partition",
+            "mccarthy_91",
+        ]:
+            with self.subTest(f"test_{f} failed\n"):
+                self.assertTrue(fns[f].check().is_sat())
 
 
 if __name__ == "__main__":

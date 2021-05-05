@@ -94,10 +94,6 @@ int partition(int arr[], int size, int sep) {
     return first;
 }
 
-/*
-M(n) = n - 10, if n > 100
-     = M(M(n + 11)), otherwise
-*/
 int mccarthy_91(int n) {
     freeze(N, n);
     ensures(then(N <= 101, ret == 91, ret == N - 10));
