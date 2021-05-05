@@ -99,12 +99,9 @@ M(n) = n - 10, if n > 100
      = M(M(n + 11)), otherwise
 */
 int mccarthy_91(int n) {
-    ensures(then(n <= 101, ret == 91, ret == n - 10));
+    freeze(N, n);
+    ensures(then(N <= 101, ret == 91, ret == N - 10));
     int c = 1;
-    // TODO: find a way to get rid of this `if`
-    if (n > 100) {
-        return n - 10;
-    }
     while (c != 0) {
         if (n > 100) {
             n -= 10;
@@ -114,9 +111,13 @@ int mccarthy_91(int n) {
             c += 1;
         }
         assert(
-            c >= 0
-            && n <= 10 * c + 91
-            && (n >= 91 || c > 0)
+            then(
+                N > 100,
+                c == 0 && n == N - 10,
+                c >= 0
+                && n <= 10 * c + 91
+                && (n >= 91 || c > 0)
+            )
         );
     }
     return n;
