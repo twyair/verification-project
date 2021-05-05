@@ -22,7 +22,7 @@ from expr import And, Environment, ForAll, Expr, Prop, Type, Variable
 
 @dataclass(frozen=True)
 class CheckResult:
-    def is_sat(self) -> bool:
+    def is_ok(self) -> bool:
         return False
 
 
@@ -33,7 +33,7 @@ class Unknown(CheckResult):
 
 @dataclass(frozen=True)
 class Ok(CheckResult):
-    def is_sat(self) -> bool:
+    def is_ok(self) -> bool:
         return True
 
 

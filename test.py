@@ -12,7 +12,7 @@ class VerifierTests(unittest.TestCase):
             "sort3",
         ]:
             with self.subTest(f"test_{f} failed\n"):
-                self.assertTrue(fns[f].check().is_sat())
+                self.assertTrue(fns[f].check().is_ok())
 
     def test_max3(self):
         fns = main.get_functions("max3")
@@ -22,7 +22,7 @@ class VerifierTests(unittest.TestCase):
             "max3_v3",
         ]:
             with self.subTest(f"test_{f} failed\n"):
-                self.assertTrue(fns[f].check().is_sat())
+                self.assertTrue(fns[f].check().is_ok())
 
     def test_max(self):
         fns = main.get_functions("max")
@@ -32,7 +32,7 @@ class VerifierTests(unittest.TestCase):
             "max2_float",
         ]:
             with self.subTest(f"test_{f} failed\n"):
-                self.assertTrue(fns[f].check().is_sat())
+                self.assertTrue(fns[f].check().is_ok())
         self.assertFalse("max2_wrong")
 
     def test_sort(self):
@@ -43,7 +43,7 @@ class VerifierTests(unittest.TestCase):
             "bubble_sort",
         ]:
             with self.subTest(f"test_{f} failed\n"):
-                self.assertTrue(fns[f].check().is_sat())
+                self.assertTrue(fns[f].check().is_ok())
 
     def test_bools(self):
         fns = main.get_functions("bools")
@@ -53,7 +53,7 @@ class VerifierTests(unittest.TestCase):
             "flip_even",
         ]:
             with self.subTest(f"test_{f} failed\n"):
-                self.assertTrue(fns[f].check().is_sat())
+                self.assertTrue(fns[f].check().is_ok())
         self.assertFalse("de_morgan_bug")
 
     def test_random(self):
@@ -67,7 +67,7 @@ class VerifierTests(unittest.TestCase):
             "mccarthy_91",
         ]:
             with self.subTest(f"test_{f} failed\n"):
-                self.assertTrue(fns[f].check().is_sat())
+                self.assertTrue(fns[f].check().is_ok())
 
 
 if __name__ == "__main__":
