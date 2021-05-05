@@ -44,6 +44,9 @@ class VerifierTests(unittest.TestCase):
         ]:
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check().is_ok())
+        for f in ["max2_bug", "de_morgan_bug"]:
+            with self.subTest(f"test_{f} failed\n"):
+                self.assertFalse(fns[f].check().is_ok())
 
 
 if __name__ == "__main__":
