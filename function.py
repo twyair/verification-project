@@ -32,13 +32,13 @@ class Unknown(CheckResult):
 
 
 @dataclass(frozen=True)
-class Sat(CheckResult):
+class Ok(CheckResult):
     def is_sat(self) -> bool:
         return True
 
 
 @dataclass(frozen=True)
-class Unsat(CheckResult):
+class CounterExample(CheckResult):
     model: z3.ModelRef
 
 
@@ -134,16 +134,16 @@ class Function:
     def check(self) -> CheckResult:
         """
         checks whether the function's proof rule is satisfiable
-        if it is, `check()` returns a `Sat` object
-        otherwise, `check()` returns an `Unsat`/`Unknown` object
+        if it is, `check()` returns a `Ok` object
+        otherwise, `check()` returns a `CounterExample`/`Unknown` object
         """
         solver = z3.Solver()
         solver.add(z3.Not(self.get_proof_rule().as_z3()))
         result = solver.check()
         if result.r == 1:
-            return Unsat(solver.model())
+            return CounterExample(solver.model())
         elif result.r == -1:
-            return Sat()
+            return Ok()
         else:
             return Unknown(result.r)
 
