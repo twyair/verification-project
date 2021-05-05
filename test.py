@@ -43,6 +43,7 @@ class VerifierTests(unittest.TestCase):
         self.assertTrue(fns["vector_add"].check().is_sat())
         self.assertTrue(fns["sqrt_v1"].check().is_sat())
         self.assertTrue(fns["partition"].check().is_sat())
+        self.assertTrue(fns["mccarthy_91"].check().is_sat())
 
 
 if __name__ == "__main__":

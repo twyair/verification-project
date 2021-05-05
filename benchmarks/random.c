@@ -93,3 +93,31 @@ int partition(int arr[], int size, int sep) {
     }
     return first;
 }
+
+/*
+M(n) = n - 10, if n > 100
+     = M(M(n + 11)), otherwise
+*/
+int mccarthy_91(int n) {
+    ensures(then(n <= 101, ret == 91, ret == n - 10));
+    int c = 1;
+    // TODO: find a way to get rid of this `if`
+    if (n > 100) {
+        return n - 10;
+    }
+    while (c != 0) {
+        if (n > 100) {
+            n -= 10;
+            c -= 1;
+        } else {
+            n += 11;
+            c += 1;
+        }
+        assert(
+            c >= 0
+            && n <= 10 * c + 91
+            && (n >= 91 || c > 0)
+        );
+    }
+    return n;
+}
