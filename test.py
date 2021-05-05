@@ -24,16 +24,6 @@ class VerifierTests(unittest.TestCase):
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check().is_ok())
 
-    def test_max(self):
-        fns = main.get_functions("max")
-        for f in [
-            "array_max",
-            "max2",
-            "max2_float",
-        ]:
-            with self.subTest(f"test_{f} failed\n"):
-                self.assertTrue(fns[f].check().is_ok())
-
     def test_sort(self):
         fns = main.get_functions("sort")
         for f in [
@@ -56,6 +46,9 @@ class VerifierTests(unittest.TestCase):
             "de_morgan",
             "first_true",
             "flip_even",
+            "array_max",
+            "max2",
+            "max2_float",
         ]:
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check().is_ok())
