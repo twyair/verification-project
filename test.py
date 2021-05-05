@@ -33,7 +33,6 @@ class VerifierTests(unittest.TestCase):
         ]:
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check().is_ok())
-        self.assertFalse("max2_wrong")
 
     def test_sort(self):
         fns = main.get_functions("sort")
@@ -45,17 +44,6 @@ class VerifierTests(unittest.TestCase):
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check().is_ok())
 
-    def test_bools(self):
-        fns = main.get_functions("bools")
-        for f in [
-            "de_morgan",
-            "first_true",
-            "flip_even",
-        ]:
-            with self.subTest(f"test_{f} failed\n"):
-                self.assertTrue(fns[f].check().is_ok())
-        self.assertFalse("de_morgan_bug")
-
     def test_random(self):
         fns = main.get_functions("random")
         for f in [
@@ -65,6 +53,9 @@ class VerifierTests(unittest.TestCase):
             "sqrt_v1",
             "partition",
             "mccarthy_91",
+            "de_morgan",
+            "first_true",
+            "flip_even",
         ]:
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check().is_ok())
