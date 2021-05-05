@@ -31,6 +31,7 @@ class VerifierTests(unittest.TestCase):
             "array_reverse",
             "vector_add",
             "sqrt_v1",
+            "sqrt_v2",
             "partition",
             "mccarthy_91",
             "de_morgan",

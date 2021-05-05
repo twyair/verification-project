@@ -3,7 +3,7 @@
 /* returns the square root of a perfect square
  * the result for non-perfect squares is undefined
  */
-int sqrt_v2(int num) {
+int sqrt_v3(int num) {
     requires(num > 0);
     ensures(then(exists(k, range(1, num), k * k == num), ret * ret == num));
 

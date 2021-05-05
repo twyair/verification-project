@@ -143,6 +143,17 @@ int sqrt_v1(int num) {
     return -1;
 }
 
+int sqrt_v2(int num) {
+    requires(num > 0);
+    ensures(ret * ret <= num && (ret + 1) * (ret + 1) > num);
+    int i = 1;
+    while (i * i <= num) {
+        assert(i >= 1 && i <= num && forall(k, range(0, i + 1), k * k <= num));
+        i += 1;
+    }
+    return i - 1;
+}
+
 int partition(int arr[], int size, int sep) {
     requires(size > 0);
     freeze(ARR, arr);
