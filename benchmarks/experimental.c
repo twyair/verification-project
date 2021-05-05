@@ -27,14 +27,36 @@ int sqrt_v2(int num) {
     return res;
 }
 
-// TODO:
 void merge(int arr1[], int arr2[], int res[], int size1, int size2) {
     requires(
         size1 > 0 && size2 > 0
-        && forall(k, range(0, size1 - 1), arr1[k] <= arr1[k+1])
-        && forall(k, range(0, size2 - 1), arr2[k] <= arr2[k+1])
+        && forall(t, range(0, size1 - 1), arr1[t] <= arr1[t+1])
+        && forall(t, range(0, size2 - 1), arr2[t] <= arr2[t+1])
     );
-    ensures(forall(k, range(size1 + size2 - 1), res[k] <= res[k+1]));
+    remember(
+        size1 > 0 && size2 > 0
+        && forall(t, range(0, size1 - 1), arr1[t] <= arr1[t+1])
+        && forall(t, range(0, size2 - 1), arr2[t] <= arr2[t+1])
+    );
+    ensures(forall(t, range(size1 + size2 - 1), res[t] <= res[t+1]));
+    int i = 0;
+    int j = 0;
+    while (i < size1 || j < size2) {
+        assert(
+            i >= 0 && j >= 0 && i <= size1 && j <= size2
+            && (i < size1 || j < size2)
+            && forall(t, range(0, i), exists(s, range(0, i + j), arr1[t] == res[s]))
+            && forall(t, range(0, j), exists(s, range(0, i + j), arr2[t] == res[s]))
+            && forall(t, range(0, i + j - 1), res[t] <= res[t + 1])
+        );
+        if (j >= size2 || arr1[i] < arr2[j]) {
+            res[i + j] = arr1[i];
+            i += 1;
+        } else {
+            res[i + j] = arr2[j];
+            j += 1;
+        }
+    }
 }
 
 /*
@@ -59,6 +81,7 @@ int mccarthy_91(int n) {
 
 /*
  * taken from [https://github.com/dafny-lang/dafny/blob/master/Test/dafny4/BinarySearch.dfy]
+ * FIXME: verification hangs
  */
 int binary_search(int arr[], int size, int key) {
     requires(
