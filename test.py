@@ -24,16 +24,6 @@ class VerifierTests(unittest.TestCase):
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check().is_ok())
 
-    def test_sort(self):
-        fns = main.get_functions("sort")
-        for f in [
-            "bubble_sort_sub",
-            "insertion_sort",
-            "bubble_sort",
-        ]:
-            with self.subTest(f"test_{f} failed\n"):
-                self.assertTrue(fns[f].check().is_ok())
-
     def test_random(self):
         fns = main.get_functions("random")
         for f in [
@@ -49,6 +39,8 @@ class VerifierTests(unittest.TestCase):
             "array_max",
             "max2",
             "max2_float",
+            "insertion_sort",
+            "bubble_sort",
         ]:
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check().is_ok())
