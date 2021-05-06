@@ -19,7 +19,17 @@ from cfg import (
     StartNode,
     create_cfg,
 )
-from expr import And, Environment, ForAll, Expr, Predicate, Prop, Type, Variable
+from expr import (
+    And,
+    Environment,
+    ForAll,
+    Expr,
+    ForAllMany,
+    Predicate,
+    Prop,
+    Type,
+    Variable,
+)
 
 
 @dataclass(frozen=True)
@@ -37,6 +47,19 @@ class Unknown(CheckResult):
 class Ok(CheckResult):
     def is_ok(self) -> bool:
         return True
+
+
+@dataclass(frozen=True)
+class HornOk(CheckResult):
+    model: z3.ModelRef
+
+    def is_ok(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class HornFail(CheckResult):
+    pass
 
 
 @dataclass(frozen=True)
@@ -102,9 +125,9 @@ class Function:
         return Function(cfg=cfg, name=fn_name, vars=vars, params=params)
 
     def get_proof_rule(self) -> Expr:
-        def add_quantifiers(prop: Expr) -> Expr:
+        def add_quantifiers(prop: Expr, d: Dict[str, Type]) -> Expr:
             return reduce(
-                lambda acc, x: ForAll(Variable(*x), x[1], acc), self.vars.items(), prop
+                lambda acc, x: ForAll(Variable(*x), x[1], acc), d.items(), prop
             )
 
         rule = reduce(
@@ -114,7 +137,20 @@ class Function:
                 for path in self.cfg.generate_paths(BasicPath.empty(), set())
             ],
         )
-        return add_quantifiers(rule)
+        return add_quantifiers(rule, self.vars)
+
+    def get_proof_rule_horn(self) -> Expr:
+        vars = [Variable(v, t) for v, t in self.vars.items()] + [
+            Variable(v, t) for v, t in self.params.items()
+        ]
+        rule = reduce(
+            lambda acc, x: And(acc, x),
+            [
+                ForAllMany(vars, path.get_proof_rule())
+                for path in self.cfg.generate_paths(BasicPath.empty(), set())
+            ],
+        )
+        return rule
 
     def get_proof_rule_as_string(self) -> str:
         return str(self.get_proof_rule())
@@ -142,6 +178,17 @@ class Function:
             return CounterExample(solver.model())
         elif result.r == -1:
             return Ok()
+        else:
+            return Unknown(result.r)
+
+    def check_horn(self) -> CheckResult:
+        solver = z3.SolverFor("HORN")
+        solver.add(self.get_proof_rule_horn().as_z3())
+        result = solver.check()
+        if result.r == 1:
+            return HornOk(solver.model())
+        elif result.r == -1:
+            return HornFail()
         else:
             return Unknown(result.r)
 
@@ -310,7 +357,11 @@ class Function:
                         del node2cycle[n]
             del node2cycle[point]
 
-        vars = sorted(set(self.cfg.get_vars(set())), key=lambda v: v.var)
+        vars = sorted(
+            [Variable(v, t) for v, t in self.vars.items()]
+            + [Variable(v, t) for v, t in self.params.items()],
+            key=lambda v: v.var,
+        )
         sorts = [v.type_.as_z3() for v in vars]
 
         for index, cp in enumerate(cutpoints):

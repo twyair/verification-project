@@ -541,6 +541,15 @@ class ForAll(Prop):
 
 
 @dataclass(frozen=True)
+class ForAllMany(Prop):
+    vars: List[Variable]
+    prop: Expr
+
+    def as_z3(self):
+        return z3.ForAll([v.as_z3() for v in self.vars], self.prop.as_z3())
+
+
+@dataclass(frozen=True)
 class Exists(Prop):
     var: Variable
     domain: Union[Tuple[Expr, Expr], Type]
