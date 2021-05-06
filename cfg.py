@@ -1,6 +1,6 @@
 from functools import reduce
 from itertools import chain
-from typing import Dict, FrozenSet, Iterator, List, Optional, Set
+from typing import Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
 from dataclasses import dataclass
 import dataclasses
 
@@ -76,7 +76,7 @@ class BasicPath:
 @dataclass
 class CfgNode:
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int]
+        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         raise NotImplementedError
 
@@ -91,7 +91,9 @@ class DummyNode(CfgNode):
     see for example how CFGs are created for loops
     """
 
-    def replace(self, dummy: "DummyNode", node: "CfgNode", visited: Set[int]):
+    def replace(
+        self, dummy: "DummyNode", node: "CfgNode", visited: Set[int],
+    ):
         return
 
 
@@ -101,11 +103,12 @@ class StartNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int]
+        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         yield from self.next_node.generate_paths(
             path if self.requires is None else path.assert_start(self.requires),
             visited,
+            visited_asserts,
         )
 
     def replace(self, dummy: DummyNode, node: CfgNode, visited: Set[int]):
@@ -121,9 +124,10 @@ class EndNode(CfgNode):
     assertion: Optional[Expr]
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int]
+        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
-        if self.assertion is not None:
+        if self.assertion is not None and id(self) not in visited_asserts:
+            visited_asserts.add(id(self))
             yield path.assert_end(self.assertion)
 
     def replace(self, dummy: DummyNode, node: CfgNode, visited: Set[int]):
@@ -137,11 +141,15 @@ class CondNode(CfgNode):
     false_br: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int]
+        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         condition = self.condition
-        yield from self.true_br.generate_paths(path.condition(condition), visited)
-        yield from self.false_br.generate_paths(path.condition(Not(condition)), visited)
+        yield from self.true_br.generate_paths(
+            path.condition(condition), visited, visited_asserts
+        )
+        yield from self.false_br.generate_paths(
+            path.condition(Not(condition)), visited, visited_asserts
+        )
 
     def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
         if id(self) in visited:
@@ -161,10 +169,10 @@ class AssignmentNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int]
+        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         yield from self.next_node.generate_paths(
-            path.transform(self.var.var, self.expression), visited
+            path.transform(self.var.var, self.expression), visited, visited_asserts
         )
 
     def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
@@ -181,13 +189,18 @@ class AssertNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int]
+        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         yield path.assert_end(self.assertion)
         if id(self) in visited:
             return
+        if id(self) in visited_asserts:
+            return
+        visited_asserts.add(id(self))
         yield from self.next_node.generate_paths(
-            BasicPath.empty().assert_start(self.assertion), visited | {id(self)}
+            BasicPath.empty().assert_start(self.assertion),
+            visited | {id(self)},
+            visited_asserts,
         )
 
     def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
