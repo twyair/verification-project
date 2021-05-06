@@ -211,6 +211,16 @@ class AssertNode(CfgNode):
         self.next_node.replace(dummy, node, visited)
 
 
+@dataclass
+class CutpointNode(CfgNode):
+    next_node: CfgNode
+
+    def generate_paths(
+        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
+    ) -> Iterator[BasicPath]:
+        raise NotImplementedError
+
+
 def statement_create_cfg(
     ast: AstNode,
     next_node: CfgNode,

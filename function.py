@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from functools import reduce
-from typing import Dict, List, Optional
+import itertools
+from typing import Dict, List, Optional, Set
 
 import z3
 from pygraphviz.agraph import AGraph
@@ -12,6 +13,7 @@ from cfg import (
     BasicPath,
     CfgNode,
     CondNode,
+    CutpointNode,
     DummyNode,
     EndNode,
     StartNode,
@@ -109,7 +111,9 @@ class Function:
             lambda acc, x: And(acc, x),
             [
                 path.get_proof_rule()
-                for path in self.cfg.generate_paths(BasicPath.empty(), frozenset())
+                for path in self.cfg.generate_paths(
+                    BasicPath.empty(), frozenset(), set()
+                )
             ],
         )
         return add_quantifiers(rule)
@@ -119,7 +123,7 @@ class Function:
 
     def get_failing_props(self) -> List[Prop]:
         props: List[Prop] = []
-        for path in self.cfg.generate_paths(BasicPath.empty(), frozenset()):
+        for path in self.cfg.generate_paths(BasicPath.empty(), frozenset(), set()):
             prop = path.get_proof_rule()
             for x in props:
                 if x == prop:
@@ -239,3 +243,83 @@ class Function:
         traverse(self.cfg)
 
         graph.draw(path=filepath, prog="dot")
+
+    def set_cutpoints(self):
+        import networkx as nx
+
+        graph = nx.DiGraph()
+        id2node: Dict[int, CfgNode] = {}
+
+        def get_id(node: CfgNode) -> int:
+            return id(node)
+
+        def traverse(node: CfgNode):
+            id_ = get_id(node)
+            if id_ in id2node:
+                return
+            id2node[id_] = node
+            if isinstance(node, StartNode):
+                graph.add_node(id_,)
+                graph.add_edge(id_, get_id(node.next_node))
+                traverse(node.next_node)
+            elif isinstance(node, AssignmentNode):
+                graph.add_node(id_,)
+                graph.add_edge(id_, get_id(node.next_node))
+                traverse(node.next_node)
+            elif isinstance(node, CondNode):
+                graph.add_node(id_,)
+                graph.add_edge(id_, get_id(node.true_br))
+                graph.add_edge(id_, get_id(node.false_br))
+                traverse(node.true_br)
+                traverse(node.false_br)
+            elif isinstance(node, EndNode):
+                graph.add_node(id_,)
+            elif isinstance(node, AssertNode):
+                graph.add_node(id_,)
+                graph.add_edge(id_, get_id(node.next_node))
+                traverse(node.next_node)
+            elif isinstance(node, DummyNode):
+                graph.add_node(id_)
+            else:
+                assert False
+
+        traverse(self.cfg)
+
+        cycles = list(nx.simple_cycles(graph))
+        node2cycle: Dict[int, Set[int]] = {
+            n: set() for n in set(itertools.chain.from_iterable(cycles))
+        }
+        for i, c in enumerate(cycles):
+            for n in c:
+                node2cycle[n] |= {i}
+
+        cutpoints = []
+        while node2cycle:
+            point = max(node2cycle, key=lambda n: len(node2cycle[n]))
+            cutpoints.append(point)
+            for i in node2cycle[point]:
+                for n in cycles[i]:
+                    if n == point:
+                        continue
+                    node2cycle[n].remove(i)
+                    if not node2cycle[n]:
+                        del node2cycle[n]
+            del node2cycle[point]
+
+        for cp in cutpoints:
+            node_cp = id2node[cp]
+            new_node = CutpointNode(node_cp)
+            yield new_node
+            for n in graph.predecessors(cp):
+                node = id2node[n]
+                if isinstance(
+                    node, (AssertNode, AssignmentNode, StartNode, CutpointNode)
+                ):
+                    node.next_node = new_node
+                elif isinstance(node, CondNode):
+                    if node.true_br is node_cp:
+                        node.true_br = new_node
+                    else:
+                        node.false_br = new_node
+                else:
+                    assert False, f"unexpected node of type {type(node)}"
