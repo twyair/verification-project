@@ -293,7 +293,7 @@ class Function:
             for n in c:
                 node2cycle[n] |= {i}
 
-        cutpoints = []
+        cutpoints: List[int] = []
         while node2cycle:
             point = max(node2cycle, key=lambda n: len(node2cycle[n]))
             cutpoints.append(point)
@@ -306,10 +306,9 @@ class Function:
                         del node2cycle[n]
             del node2cycle[point]
 
-        for cp in cutpoints:
+        for index, cp in enumerate(cutpoints):
             node_cp = id2node[cp]
-            new_node = CutpointNode(node_cp)
-            yield new_node
+            new_node = CutpointNode(index, node_cp)
             for n in graph.predecessors(cp):
                 node = id2node[n]
                 if isinstance(

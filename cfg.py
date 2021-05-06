@@ -1,6 +1,6 @@
 from functools import reduce
 from itertools import chain
-from typing import Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
+from typing import Dict, FrozenSet, Iterator, List, Optional, Set, Tuple, cast
 from dataclasses import dataclass
 import dataclasses
 
@@ -18,6 +18,7 @@ from expr import (
     Prop,
     Then,
     Not,
+    Predicate,
 )
 
 
@@ -213,12 +214,29 @@ class AssertNode(CfgNode):
 
 @dataclass
 class CutpointNode(CfgNode):
+    index: int
     next_node: CfgNode
 
     def generate_paths(
         self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
-        raise NotImplementedError
+        vars: List[Variable] = []  # TODO: find the relevant free vars
+        predicate = Predicate(
+            name=f"P{self.index}",
+            arguments=cast(List[Expr], vars),
+            sorts=[v.type_.as_z3() for v in vars],
+        )
+        yield path.assert_end(predicate)
+        if id(self) in visited:
+            return
+        if id(self) in visited_asserts:
+            return
+        visited_asserts.add(id(self))
+        yield from self.next_node.generate_paths(
+            BasicPath.empty().assert_start(predicate),
+            visited | {id(self)},
+            visited_asserts,
+        )
 
 
 def statement_create_cfg(

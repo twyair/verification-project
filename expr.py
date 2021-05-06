@@ -18,6 +18,22 @@ class Type(enum.Enum):
     array_float = "array_float"
     array_bool = "array_bool"
 
+    def as_z3(self):
+        if self == Type.int:
+            return z3.IntSort()
+        elif self == Type.float:
+            return z3.FloatDouble()
+        elif self == Type.bool:
+            return z3.BoolSort()
+        elif self == Type.array_int:
+            return z3.ArraySort(z3.IntSort(), z3.IntSort())
+        elif self == Type.array_bool:
+            return z3.ArraySort(z3.IntSort(), z3.BoolSort())
+        elif self == Type.array_float:
+            return z3.ArraySort(z3.IntSort(), z3.FloatDouble())
+        else:
+            assert False, f"unknown type: {self}"
+
 
 @dataclass(frozen=True)
 class Environment:
@@ -284,22 +300,7 @@ class Variable(Expr):
         return self.var
 
     def as_z3(self) -> z3.ExprRef:
-        # TODO: add more types
-        if self.type_ == Type.int:
-            return z3.Int(self.var)
-        elif self.type_ == Type.float:
-            # TODO: properly determine the fp sort
-            return z3.FP(self.var, z3.FloatDouble())
-        elif self.type_ == Type.bool:
-            return z3.Bool(self.var)
-        elif self.type_ == Type.array_int:
-            return z3.Array(self.var, z3.IntSort(), z3.IntSort())
-        elif self.type_ == Type.array_bool:
-            return z3.Array(self.var, z3.IntSort(), z3.BoolSort())
-        elif self.type_ == Type.array_float:
-            return z3.Array(self.var, z3.IntSort(), z3.FloatDouble())
-        else:
-            assert False, f"unknown type: {self.type_}"
+        return z3.Const(self.var, self.type_.as_z3())
 
 
 @dataclass(frozen=True)
@@ -574,3 +575,27 @@ class Exists(Prop):
                     self.prop.as_z3(),
                 ),
             )
+
+
+@dataclass(frozen=True)
+class Predicate(Prop):
+    name: str
+    arguments: List[Expr]
+    sorts: List
+
+    def assign(self, vars: Dict[str, Expr]) -> Prop:
+        return Predicate(
+            name=self.name,
+            arguments=[a.assign(vars) for a in self.arguments],
+            sorts=self.sorts,
+        )
+
+    def __str__(self) -> str:
+        args = ",".join(str(a) for a in self.arguments)
+        return f"{self.name}({args})"
+
+    def as_z3(self):
+        return z3.Function(self.name, *self.sorts, z3.BoolSort())(
+            *(a.as_z3() for a in self.arguments)
+        )
+
