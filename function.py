@@ -123,14 +123,10 @@ class Function:
         props: List[Prop] = []
         for path in self.cfg.generate_paths(BasicPath.empty(), set()):
             prop = path.get_proof_rule()
-            for x in props:
-                if x == prop:
-                    break
-            else:
-                solver = z3.Solver()
-                solver.add(z3.Not(prop.as_z3()))
-                if solver.check().r != -1:
-                    props.append(prop)
+            solver = z3.Solver()
+            solver.add(z3.Not(prop.as_z3()))
+            if solver.check().r != -1:
+                props.append(prop)
         return props
 
     def check(self) -> CheckResult:
