@@ -2,22 +2,29 @@
 
 /* returns the square root of a perfect square
  * the result for non-perfect squares is undefined
+ * [https://en.wikipedia.org/wiki/Methods_of_computing_square_roots#Binary_numeral_system_(base_2)]
  */
 int sqrt_v3(int num) {
-    requires(num > 0);
-    ensures(then(exists(k, range(1, num), k * k == num), ret * ret == num));
+    requires(num > 1);
+    freeze(NUM, num);
+    ensures(ret * ret <= NUM && (ret + 1) * (ret + 1) > NUM);
 
     int bit = 1;
     while (bit * 4 <= num){
-        assert(forall(k, range(1, bit), k * 4 <= num));
+        assert(
+            NUM > 1
+            && num == NUM
+            && forall(k, range(1, bit + 1), k * 4 <= num)
+        );
         bit *= 4;
     }
 
     int res = 0;
     while (bit != 0) {
+        assert(res >= 0 && num >= 0 && NUM > 1 && bit > 0 && num == NUM - res * res / bit / 4);
         if (num >= res + bit) {
             num -= res + bit;
-            res = res * 2 + bit;
+            res = res / 2 + bit;
         } else {
             res /= 2;
         }
