@@ -77,7 +77,7 @@ class BasicPath:
 @dataclass
 class CfgNode:
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         raise NotImplementedError
 
@@ -104,11 +104,10 @@ class StartNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         yield from self.next_node.generate_paths(
             path if self.requires is None else path.assert_start(self.requires),
-            visited,
             visited_asserts,
         )
 
@@ -125,7 +124,7 @@ class EndNode(CfgNode):
     assertion: Optional[Expr]
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         if self.assertion is not None and id(self) not in visited_asserts:
             visited_asserts.add(id(self))
@@ -142,14 +141,14 @@ class CondNode(CfgNode):
     false_br: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         condition = self.condition
         yield from self.true_br.generate_paths(
-            path.condition(condition), visited, visited_asserts
+            path.condition(condition), visited_asserts
         )
         yield from self.false_br.generate_paths(
-            path.condition(Not(condition)), visited, visited_asserts
+            path.condition(Not(condition)), visited_asserts
         )
 
     def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
@@ -170,10 +169,10 @@ class AssignmentNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         yield from self.next_node.generate_paths(
-            path.transform(self.var.var, self.expression), visited, visited_asserts
+            path.transform(self.var.var, self.expression), visited_asserts
         )
 
     def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
@@ -190,18 +189,14 @@ class AssertNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         yield path.assert_end(self.assertion)
-        if id(self) in visited:
-            return
         if id(self) in visited_asserts:
             return
         visited_asserts.add(id(self))
         yield from self.next_node.generate_paths(
-            BasicPath.empty().assert_start(self.assertion),
-            visited | {id(self)},
-            visited_asserts,
+            BasicPath.empty().assert_start(self.assertion), visited_asserts,
         )
 
     def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
@@ -218,7 +213,7 @@ class CutpointNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited: FrozenSet[int], visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
         vars: List[Variable] = []  # TODO: find the relevant free vars
         predicate = Predicate(
@@ -227,15 +222,11 @@ class CutpointNode(CfgNode):
             sorts=[v.type_.as_z3() for v in vars],
         )
         yield path.assert_end(predicate)
-        if id(self) in visited:
-            return
         if id(self) in visited_asserts:
             return
         visited_asserts.add(id(self))
         yield from self.next_node.generate_paths(
-            BasicPath.empty().assert_start(predicate),
-            visited | {id(self)},
-            visited_asserts,
+            BasicPath.empty().assert_start(predicate), visited_asserts,
         )
 
 

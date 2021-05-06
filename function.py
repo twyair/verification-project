@@ -111,9 +111,7 @@ class Function:
             lambda acc, x: And(acc, x),
             [
                 path.get_proof_rule()
-                for path in self.cfg.generate_paths(
-                    BasicPath.empty(), frozenset(), set()
-                )
+                for path in self.cfg.generate_paths(BasicPath.empty(), set())
             ],
         )
         return add_quantifiers(rule)
@@ -123,7 +121,7 @@ class Function:
 
     def get_failing_props(self) -> List[Prop]:
         props: List[Prop] = []
-        for path in self.cfg.generate_paths(BasicPath.empty(), frozenset(), set()):
+        for path in self.cfg.generate_paths(BasicPath.empty(), set()):
             prop = path.get_proof_rule()
             for x in props:
                 if x == prop:
