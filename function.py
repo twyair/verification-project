@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from functools import reduce
 import itertools
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, cast
 
 import z3
 from pygraphviz.agraph import AGraph
@@ -19,7 +19,7 @@ from cfg import (
     StartNode,
     create_cfg,
 )
-from expr import And, Environment, ForAll, Expr, Prop, Type, Variable
+from expr import And, Environment, ForAll, Expr, Predicate, Prop, Type, Variable
 
 
 @dataclass(frozen=True)
@@ -227,6 +227,16 @@ class Function:
                 )
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
+            elif isinstance(node, CutpointNode):
+                add_node(
+                    id_,
+                    color="orange",
+                    label="predicate",
+                    shape="house",
+                    content=f"{node.predicate}",
+                )
+                graph.add_edge(id_, get_id(node.next_node))
+                traverse(node.next_node)
             elif isinstance(node, DummyNode):
                 add_node(
                     id_, color="yellow", label="dummy", shape="star", content="???"
@@ -300,9 +310,18 @@ class Function:
                         del node2cycle[n]
             del node2cycle[point]
 
+        vars = sorted(set(self.cfg.get_vars(set())), key=lambda v: v.var)
+        sorts = [v.type_.as_z3() for v in vars]
+
         for index, cp in enumerate(cutpoints):
             node_cp = id2node[cp]
-            new_node = CutpointNode(index, node_cp)
+
+            new_node = CutpointNode(
+                Predicate(
+                    name=f"P{index}", arguments=cast(List[Expr], vars), sorts=sorts,
+                ),
+                node_cp,
+            )
             for n in graph.predecessors(cp):
                 node = id2node[n]
                 if isinstance(

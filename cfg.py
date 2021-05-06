@@ -84,6 +84,9 @@ class CfgNode:
     def replace(self, dummy: "DummyNode", node: "CfgNode", visited: Set[int]):
         raise NotImplementedError
 
+    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
+        raise NotImplementedError
+
 
 @dataclass
 class DummyNode(CfgNode):
@@ -118,6 +121,12 @@ class StartNode(CfgNode):
             self.next_node = node
         self.next_node.replace(dummy, node, visited)
 
+    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
+        if id(self) in visited:
+            return
+        visited.add(id(self))
+        yield from self.next_node.get_vars(visited)
+
 
 @dataclass
 class EndNode(CfgNode):
@@ -132,6 +141,9 @@ class EndNode(CfgNode):
 
     def replace(self, dummy: DummyNode, node: CfgNode, visited: Set[int]):
         pass
+
+    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
+        return (x for x in [])  # FIXME
 
 
 @dataclass
@@ -161,6 +173,13 @@ class CondNode(CfgNode):
             self.false_br = node
         self.false_br.replace(dummy, node, visited=visited | {id(self)})
 
+    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
+        if id(self) in visited:
+            return
+        visited.add(id(self))
+        yield from self.true_br.get_vars(visited)
+        yield from self.false_br.get_vars(visited)
+
 
 @dataclass
 class AssignmentNode(CfgNode):
@@ -181,6 +200,13 @@ class AssignmentNode(CfgNode):
         if dummy is self.next_node:
             self.next_node = node
         self.next_node.replace(dummy, node, visited)
+
+    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
+        if id(self) in visited:
+            return
+        visited.add(id(self))
+        yield self.var
+        yield from self.next_node.get_vars(visited)
 
 
 @dataclass
@@ -206,28 +232,34 @@ class AssertNode(CfgNode):
             self.next_node = node
         self.next_node.replace(dummy, node, visited)
 
+    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
+        if id(self) in visited:
+            return
+        visited.add(id(self))
+        yield from self.next_node.get_vars(visited)
+
 
 @dataclass
 class CutpointNode(CfgNode):
-    index: int
+    predicate: Predicate
     next_node: CfgNode
 
     def generate_paths(
         self, path: BasicPath, visited_asserts: Set[int],
     ) -> Iterator[BasicPath]:
-        vars: List[Variable] = []  # TODO: find the relevant free vars
-        predicate = Predicate(
-            name=f"P{self.index}",
-            arguments=cast(List[Expr], vars),
-            sorts=[v.type_.as_z3() for v in vars],
-        )
-        yield path.assert_end(predicate)
+        yield path.assert_end(self.predicate)
         if id(self) in visited_asserts:
             return
         visited_asserts.add(id(self))
         yield from self.next_node.generate_paths(
-            BasicPath.empty().assert_start(predicate), visited_asserts,
+            BasicPath.empty().assert_start(self.predicate), visited_asserts,
         )
+
+    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
+        if id(self) in visited:
+            return
+        visited.add(id(self))
+        yield from self.next_node.get_vars(visited)
 
 
 def statement_create_cfg(
