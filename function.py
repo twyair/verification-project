@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Set, cast
 
 import z3
 from pygraphviz.agraph import AGraph
+import networkx as nx
 
 from cast import AstNode, AstType
 from cfg import (
@@ -70,11 +71,12 @@ class CounterExample(CheckResult):
 class Function:
     name: str
     cfg: CfgNode
-    params: Dict[str, Type]
-    vars: Dict[str, Type]
+    horn: bool
+    params: List[Variable]
+    vars: List[Variable]
 
     @staticmethod
-    def from_ast(ast: AstNode) -> "Function":
+    def from_ast(ast: AstNode, horn: bool = False) -> "Function":
         declarator = next(
             c for c in ast.children if c.type == AstType.direct_declarator
         )
@@ -121,9 +123,14 @@ class Function:
         vars = env.get_vars()
         for p in params:
             del vars[p]
-        return Function(cfg=cfg, name=fn_name, vars=vars, params=params)
+        vars = [Variable(v, t) for v, t in vars.items()]
+        params = [Variable(v, t) for v, t in params.items()]
+        if horn:
+            Function.set_cutpoints(cfg, vars + params)
+        return Function(cfg=cfg, horn=horn, name=fn_name, vars=vars, params=params,)
 
     def get_proof_rule(self) -> Expr:
+        assert not self.horn
         rule = reduce(
             lambda acc, x: And(acc, x),
             [
@@ -132,27 +139,20 @@ class Function:
             ],
         )
         if self.vars:
-            return ForAll([Variable(v, t) for v, t in self.vars.items()], rule)
+            return ForAll(self.vars, rule)
         else:
             return rule
 
-    def get_proof_rule_horn(self) -> Expr:
-        vars = [Variable(v, t) for v, t in self.vars.items()] + [
-            Variable(v, t) for v, t in self.params.items()
+    def get_proof_rule_horn(self) -> List[Expr]:
+        assert self.horn
+        vars = self.vars + self.params
+        return [
+            ForAll(vars, path.get_proof_rule())
+            for path in self.cfg.generate_paths(BasicPath.empty(), set())
         ]
-        rule = reduce(
-            lambda acc, x: And(acc, x),
-            [
-                ForAll(vars, path.get_proof_rule())
-                for path in self.cfg.generate_paths(BasicPath.empty(), set())
-            ],
-        )
-        return rule
-
-    def get_proof_rule_as_string(self) -> str:
-        return str(self.get_proof_rule())
 
     def get_failing_props(self) -> List[Prop]:
+        assert not self.horn
         props: List[Prop] = []
         for path in self.cfg.generate_paths(BasicPath.empty(), set()):
             prop = path.get_proof_rule()
@@ -165,29 +165,30 @@ class Function:
     def check(self) -> CheckResult:
         """
         checks whether the function's proof rule is satisfiable
-        if it is, `check()` returns a `Ok` object
-        otherwise, `check()` returns a `CounterExample`/`Unknown` object
+        if it is, `check()` returns an `Ok`/`HornOk` object
+        otherwise, `check()` returns a `CounterExample`/`Unknown`/`HornFail` object
         """
-        solver = z3.Solver()
-        solver.add(z3.Not(self.get_proof_rule().as_z3()))
-        result = solver.check()
-        if result.r == 1:
-            return CounterExample(solver.model())
-        elif result.r == -1:
-            return Ok()
+        if self.horn:
+            solver = z3.SolverFor("HORN")
+            for p in self.get_proof_rule_horn():
+                solver.add(p.as_z3())
+            result = solver.check()
+            if result.r == 1:
+                return HornOk(solver.model())
+            elif result.r == -1:
+                return HornFail()
+            else:
+                return Unknown(result.r)
         else:
-            return Unknown(result.r)
-
-    def check_horn(self) -> CheckResult:
-        solver = z3.SolverFor("HORN")
-        solver.add(self.get_proof_rule_horn().as_z3())
-        result = solver.check()
-        if result.r == 1:
-            return HornOk(solver.model())
-        elif result.r == -1:
-            return HornFail()
-        else:
-            return Unknown(result.r)
+            solver = z3.Solver()
+            solver.add(z3.Not(self.get_proof_rule().as_z3()))
+            result = solver.check()
+            if result.r == 1:
+                return CounterExample(solver.model())
+            elif result.r == -1:
+                return Ok()
+            else:
+                return Unknown(result.r)
 
     def draw_cfg(self, no_content=False):
         filepath = f"cfg-img/{self.name}.svg"
@@ -292,9 +293,8 @@ class Function:
 
         graph.draw(path=filepath, prog="dot")
 
-    def set_cutpoints(self):
-        import networkx as nx
-
+    @staticmethod
+    def set_cutpoints(cfg: CfgNode, vars: List[Variable]):
         graph = nx.DiGraph()
         id2node: Dict[int, CfgNode] = {}
 
@@ -331,7 +331,7 @@ class Function:
             else:
                 assert False
 
-        traverse(self.cfg)
+        traverse(cfg)
 
         cycles = list(nx.simple_cycles(graph))
         node2cycle: Dict[int, Set[int]] = {
@@ -354,11 +354,7 @@ class Function:
                         del node2cycle[n]
             del node2cycle[point]
 
-        vars = sorted(
-            [Variable(v, t) for v, t in self.vars.items()]
-            + [Variable(v, t) for v, t in self.params.items()],
-            key=lambda v: v.var,
-        )
+        vars = sorted(vars, key=lambda v: v.var,)
         sorts = [v.type_.as_z3() for v in vars]
 
         for index, cp in enumerate(cutpoints):
