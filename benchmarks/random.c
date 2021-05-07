@@ -110,7 +110,7 @@ void array_reverse(int arr[], int size) {
 
 void vector_add(int v[], int u[], int res[], int size) {
     requires(size > 0);
-    for(int i = 0; i < size; i += 1) {
+    for (int i = 0; i < size; i += 1) {
         res[i] = v[i] + u[i];
         assert(forall(k, range(0, i + 1), res[k] == v[k] + u[k]));
     }
@@ -166,7 +166,7 @@ int partition(int arr[], int size, int sep) {
 
     int first = 0;
     remember(size > 0 && first >= 0);
-    for (int _j = 0; first < size && arr[first] < sep; first += 1) {
+    for (; first < size && arr[first] < sep; first += 1) {
         assert(
             first < size
             && forall(k, range(0, first + 1), arr[k] < sep)

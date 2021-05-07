@@ -404,28 +404,38 @@ def statement_create_cfg(
             env.close_scope()
             return cond.true_br
         elif ast[0].type == AstType.FOR:
-            # TODO: handle other cases e.g. `for(;;);`
-            # for (decl; cond; inc) body
             env.open_scope()
             remembers.append([])
-            decl = statement_create_cfg(
-                ast[2], DummyNode(), end_node, None, None, env, remembers
-            )
-            cond = CondNode(Expr.from_ast(ast[3][0], env), DummyNode(), next_node)
-            assert isinstance(decl, AssignmentNode)
-            decl.next_node = cond
-            inc = statement_create_cfg(
-                AstNode(None, AstType.expression_statement, ast[4].range, [ast[4]]),
-                cond,
-                end_node,
-                None,
-                None,
-                env,
-                remembers,
-            )
+            if ast[2].type == AstType.declaration:
+                decl = statement_create_cfg(
+                    ast[2], DummyNode(), end_node, None, None, env, remembers
+                )
+                assert isinstance(decl, AssignmentNode)
+            else:
+                assert ast[2].type == AstType.semicolon
+                decl = None
+            if ast[3].type == AstType.expression_statement:
+                cond = CondNode(Expr.from_ast(ast[3][0], env), DummyNode(), next_node)
+            else:
+                assert ast[3].type == AstType.semicolon
+                cond = CondNode(BoolValue(True), DummyNode(), next_node)
+            if decl is not None:
+                decl.next_node = cond
+            if ast[4].type == AstType.paren_right:
+                inc = None
+            else:
+                inc = statement_create_cfg(
+                    AstNode(None, AstType.expression_statement, ast[4].range, [ast[4]]),
+                    cond,
+                    end_node,
+                    None,
+                    None,
+                    env,
+                    remembers,
+                )
             cond.true_br = statement_create_cfg(
-                ast[6],
-                inc,
+                ast[5] if inc is None else ast[6],
+                inc or cond,
                 end_node,
                 loop_start=cond,
                 loop_end=next_node,
@@ -434,7 +444,7 @@ def statement_create_cfg(
             )
             remembers.pop()
             env.close_scope()
-            return decl
+            return decl or cond
         else:
             assert False
     else:

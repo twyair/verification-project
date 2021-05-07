@@ -3,7 +3,7 @@
 ## TODO
 
 - [ ] handle `switch`
-- [ ] properly handle `for`
+- [X] properly handle `for`
 - [ ] handle explicit casts
 - [ ] handle implicit casts
 - [ ] handle fixed size ints as bitvectors
