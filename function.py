@@ -125,11 +125,6 @@ class Function:
         return Function(cfg=cfg, name=fn_name, vars=vars, params=params)
 
     def get_proof_rule(self) -> Expr:
-        def add_quantifiers(prop: Expr, d: Dict[str, Type]) -> Expr:
-            return reduce(
-                lambda acc, x: ForAll(Variable(*x), x[1], acc), d.items(), prop
-            )
-
         rule = reduce(
             lambda acc, x: And(acc, x),
             [
@@ -137,7 +132,10 @@ class Function:
                 for path in self.cfg.generate_paths(BasicPath.empty(), set())
             ],
         )
-        return add_quantifiers(rule, self.vars)
+        if self.vars:
+            return ForAllMany([Variable(v, t) for v, t in self.vars.items()], rule)
+        else:
+            return rule
 
     def get_proof_rule_horn(self) -> Expr:
         vars = [Variable(v, t) for v, t in self.vars.items()] + [

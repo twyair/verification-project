@@ -140,9 +140,12 @@ class Expr:
                     var_name = env.rename(var)
                     env.close_scope()
                     if quantifier == "forall":
-                        return ForAll(
-                            var=Variable(var_name, ty), domain=domain, prop=prop
-                        )
+                        if isinstance(domain, tuple):
+                            return ForAllRange(
+                                var=Variable(var_name, ty), range=domain, prop=prop
+                            )
+                        else:
+                            return ForAll(var=Variable(var_name, ty), prop=prop)
                     elif quantifier == "exists":
                         return Exists(
                             var=Variable(var_name, ty), domain=domain, prop=prop
@@ -506,38 +509,49 @@ class Then(Prop):
 @dataclass(frozen=True)
 class ForAll(Prop):
     var: Variable
-    domain: Union[Tuple[Expr, Expr], Type]
     prop: Expr
 
     def assign(self, vars: Dict[str, Expr]) -> Prop:
         if self.var in vars:
             vars = vars.copy()
             del vars[self.var.var]
-        domain = self.domain
-        if isinstance(domain, tuple):
-            domain = (domain[0].assign(vars), domain[1].assign(vars))
-        return ForAll(var=self.var, domain=domain, prop=self.prop.assign(vars))
+        return ForAll(var=self.var, prop=self.prop.assign(vars))
 
     def __str__(self) -> str:
-        domain = (
-            self.domain.value
-            if isinstance(self.domain, Type)
-            else "({},{})".format(*self.domain)
-        )
-        return f"∀{self.var.var}∈{domain}.{self.prop}"
+        return f"∀{self.var.var}∈{self.var.type_.value}.{self.prop}"
 
     def as_z3(self):
-        if isinstance(self.domain, Type):
-            return z3.ForAll([self.var.as_z3()], self.prop.as_z3())
-        else:
-            var = self.var.as_z3()
-            return z3.ForAll(
-                [var],
-                z3.Implies(
-                    z3.And(var >= self.domain[0].as_z3(), var < self.domain[1].as_z3()),
-                    self.prop.as_z3(),
-                ),
-            )
+        return z3.ForAll([self.var.as_z3()], self.prop.as_z3())
+
+
+@dataclass(frozen=True)
+class ForAllRange(Prop):
+    var: Variable
+    range: Tuple[Expr, Expr]
+    prop: Expr
+
+    def assign(self, vars: Dict[str, Expr]) -> "ForAllRange":
+        if self.var in vars:
+            vars = vars.copy()
+            del vars[self.var.var]
+        return ForAllRange(
+            var=self.var,
+            range=(self.range[0].assign(vars), self.range[1].assign(vars)),
+            prop=self.prop.assign(vars),
+        )
+
+    def __str__(self) -> str:
+        return f"∀{self.var.var}∈({self.range[0]},{self.range[1]}).{self.prop}"
+
+    def as_z3(self):
+        var = self.var.as_z3()
+        return z3.ForAll(
+            [var],
+            z3.Implies(
+                z3.And(var >= self.range[0].as_z3(), var < self.range[1].as_z3()),
+                self.prop.as_z3(),
+            ),
+        )
 
 
 @dataclass(frozen=True)
