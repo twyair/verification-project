@@ -24,7 +24,6 @@ from expr import (
     Environment,
     ForAll,
     Expr,
-    ForAllMany,
     Predicate,
     Prop,
     Type,
@@ -133,7 +132,7 @@ class Function:
             ],
         )
         if self.vars:
-            return ForAllMany([Variable(v, t) for v, t in self.vars.items()], rule)
+            return ForAll([Variable(v, t) for v, t in self.vars.items()], rule)
         else:
             return rule
 
@@ -144,7 +143,7 @@ class Function:
         rule = reduce(
             lambda acc, x: And(acc, x),
             [
-                ForAllMany(vars, path.get_proof_rule())
+                ForAll(vars, path.get_proof_rule())
                 for path in self.cfg.generate_paths(BasicPath.empty(), set())
             ],
         )

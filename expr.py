@@ -145,7 +145,7 @@ class Expr:
                                 var=Variable(var_name, ty), range=domain, prop=prop
                             )
                         else:
-                            return ForAll(var=Variable(var_name, ty), prop=prop)
+                            return ForAll(vars=[Variable(var_name, ty)], prop=prop)
                     elif quantifier == "exists":
                         return Exists(
                             var=Variable(var_name, ty), domain=domain, prop=prop
@@ -508,20 +508,23 @@ class Then(Prop):
 
 @dataclass(frozen=True)
 class ForAll(Prop):
-    var: Variable
+    vars: List[Variable]
     prop: Expr
 
     def assign(self, vars: Dict[str, Expr]) -> Prop:
-        if self.var in vars:
-            vars = vars.copy()
-            del vars[self.var.var]
-        return ForAll(var=self.var, prop=self.prop.assign(vars))
+        for var in self.vars:
+            assert var.var not in vars
+        return ForAll(vars=self.vars, prop=self.prop.assign(vars))
 
     def __str__(self) -> str:
-        return f"∀{self.var.var}∈{self.var.type_.value}.{self.prop}"
+        return (
+            "∀"
+            + ",".join(f"{var.var}∈{var.type_.value}" for var in self.vars)
+            + f".{self.prop}"
+        )
 
     def as_z3(self):
-        return z3.ForAll([self.var.as_z3()], self.prop.as_z3())
+        return z3.ForAll([var.as_z3() for var in self.vars], self.prop.as_z3())
 
 
 @dataclass(frozen=True)
@@ -552,15 +555,6 @@ class ForAllRange(Prop):
                 self.prop.as_z3(),
             ),
         )
-
-
-@dataclass(frozen=True)
-class ForAllMany(Prop):
-    vars: List[Variable]
-    prop: Expr
-
-    def as_z3(self):
-        return z3.ForAll([v.as_z3() for v in self.vars], self.prop.as_z3())
 
 
 @dataclass(frozen=True)
