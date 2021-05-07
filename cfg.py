@@ -1,6 +1,6 @@
 from functools import reduce
 from itertools import chain
-from typing import Dict, FrozenSet, Iterator, List, Optional, Set, Tuple, cast
+from typing import Dict, Iterator, List, Optional, Set
 from dataclasses import dataclass
 import dataclasses
 
@@ -84,9 +84,6 @@ class CfgNode:
     def replace(self, dummy: "DummyNode", node: "CfgNode", visited: Set[int]):
         raise NotImplementedError
 
-    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
-        raise NotImplementedError
-
 
 @dataclass
 class DummyNode(CfgNode):
@@ -121,12 +118,6 @@ class StartNode(CfgNode):
             self.next_node = node
         self.next_node.replace(dummy, node, visited)
 
-    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
-        if id(self) in visited:
-            return
-        visited.add(id(self))
-        yield from self.next_node.get_vars(visited)
-
 
 @dataclass
 class EndNode(CfgNode):
@@ -141,9 +132,6 @@ class EndNode(CfgNode):
 
     def replace(self, dummy: DummyNode, node: CfgNode, visited: Set[int]):
         pass
-
-    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
-        return (x for x in [])  # FIXME
 
 
 @dataclass
@@ -173,13 +161,6 @@ class CondNode(CfgNode):
             self.false_br = node
         self.false_br.replace(dummy, node, visited=visited | {id(self)})
 
-    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
-        if id(self) in visited:
-            return
-        visited.add(id(self))
-        yield from self.true_br.get_vars(visited)
-        yield from self.false_br.get_vars(visited)
-
 
 @dataclass
 class AssignmentNode(CfgNode):
@@ -200,13 +181,6 @@ class AssignmentNode(CfgNode):
         if dummy is self.next_node:
             self.next_node = node
         self.next_node.replace(dummy, node, visited)
-
-    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
-        if id(self) in visited:
-            return
-        visited.add(id(self))
-        yield self.var
-        yield from self.next_node.get_vars(visited)
 
 
 @dataclass
@@ -232,12 +206,6 @@ class AssertNode(CfgNode):
             self.next_node = node
         self.next_node.replace(dummy, node, visited)
 
-    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
-        if id(self) in visited:
-            return
-        visited.add(id(self))
-        yield from self.next_node.get_vars(visited)
-
 
 @dataclass
 class CutpointNode(CfgNode):
@@ -254,12 +222,6 @@ class CutpointNode(CfgNode):
         yield from self.next_node.generate_paths(
             BasicPath.empty().assert_start(self.predicate), visited_asserts,
         )
-
-    def get_vars(self, visited: Set[int]) -> Iterator[Variable]:
-        if id(self) in visited:
-            return
-        visited.add(id(self))
-        yield from self.next_node.get_vars(visited)
 
 
 def statement_create_cfg(
