@@ -1,4 +1,5 @@
 #ifndef ANNOTATIONS
+#include <stdbool.h>
 #define requires(x)
 #define ensures(x)
 #define assert(x)

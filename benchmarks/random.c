@@ -123,11 +123,11 @@ bool is_prime(int num) {
     ensures(forall(k, range(2, num), num % k != 0) == ret);
     for (int i = 2; i != num; i += 1) {
         if (num % i == 0) {
-            return 0 != 0;
+            return false;
         }
         assert(i >= 2 && i < num && forall(k, range(2, i + 1), num % k != 0));
     }
-    return 0 == 0;
+    return true;
 }
 
 int sqrt_v1(int num) {

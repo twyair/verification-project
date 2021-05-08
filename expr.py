@@ -108,6 +108,8 @@ class Expr:
             )
         elif ast.type == AstType.IDENTIFIER:
             assert ast.text is not None
+            if ast.text in ("true", "false"):
+                return BoolValue(ast.text == "true")
             return Variable(env.rename(ast.text), env[ast.text])
         elif ast.type == AstType.logical_and_expression:
             return And(lhs=Expr.from_ast(ast[0], env), rhs=Expr.from_ast(ast[2], env),)
