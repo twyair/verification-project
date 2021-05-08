@@ -1,6 +1,6 @@
 from functools import reduce
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set
+from typing import Dict, Iterator, List, Optional, Set, Tuple, cast
 from dataclasses import dataclass
 import dataclasses
 
@@ -13,6 +13,8 @@ from expr import (
     ArrayStore,
     Environment,
     Expr,
+    IntValue,
+    RelExpr,
     Type,
     Variable,
     Prop,
@@ -232,23 +234,94 @@ def statement_create_cfg(
     loop_end: Optional[CfgNode],
     env: Environment,
     remembers: List[List[Expr]],
+    labels: List[Tuple[Optional[Expr], CfgNode]],
 ) -> CfgNode:
-    if ast.type == AstType.semicolon:
+    if ast.type == AstType.labeled_statement:
+        if ast[0].type == AstType.DEFAULT:
+            statement = statement_create_cfg(
+                ast[2],
+                next_node,
+                end_node,
+                loop_start,
+                loop_end,
+                env,
+                remembers,
+                labels,
+            )
+            labels.append((None, statement))
+            return statement
+        else:
+            assert ast[0].type == AstType.CASE
+            value = Expr.from_ast(ast[1], env)
+            statement = statement_create_cfg(
+                ast[3],
+                next_node,
+                end_node,
+                loop_start,
+                loop_end,
+                env,
+                remembers,
+                labels,
+            )
+            labels.append((value, statement))
+            return statement
+    elif ast.type == AstType.semicolon:
         return next_node
     elif ast.type == AstType.selection_statement:
-        # TODO: handle switch
-        assert ast[0].type == AstType.IF
-        return CondNode(
-            condition=Expr.from_ast(ast[2], env),
-            true_br=statement_create_cfg(
-                ast[4], next_node, end_node, loop_start, loop_end, env, remembers
-            ),
-            false_br=statement_create_cfg(
-                ast[6], next_node, end_node, loop_start, loop_end, env, remembers
+        if ast[0].type == AstType.IF:
+            return CondNode(
+                condition=Expr.from_ast(ast[2], env),
+                true_br=statement_create_cfg(
+                    ast[4],
+                    next_node,
+                    end_node,
+                    loop_start,
+                    loop_end,
+                    env,
+                    remembers,
+                    labels,
+                ),
+                false_br=statement_create_cfg(
+                    ast[6],
+                    next_node,
+                    end_node,
+                    loop_start,
+                    loop_end,
+                    env,
+                    remembers,
+                    labels,
+                )
+                if len(ast.children) == 7
+                else next_node,
             )
-            if len(ast.children) == 7
-            else next_node,
-        )
+        elif ast[0].type == AstType.SWITCH:
+            switch_value = Expr.from_ast(ast[2], env)
+            labels = []
+            statement = statement_create_cfg(
+                ast[4],
+                next_node,
+                end_node,
+                loop_start,
+                next_node,
+                env,
+                remembers,
+                labels,
+            )
+            conds: List[CondNode] = []
+            default = next_node
+            for case_value, statement in labels:
+                if case_value is None:
+                    default = next_node
+                    continue
+                dummy = DummyNode()
+                conds.append(
+                    CondNode(RelExpr("==", switch_value, case_value), statement, dummy,)
+                )
+            for cond, next_ in zip(conds, cast(List[CfgNode], conds[1:]) + [default]):
+                cond.false_br = next_
+            return conds[0] if conds else default
+        else:
+            assert False
     elif ast.type == AstType.compound_statement:
         env.open_scope()
         remembers.append([])
@@ -257,7 +330,7 @@ def statement_create_cfg(
         for s in ast[1].children:
             dummy = DummyNode()
             statement = statement_create_cfg(
-                s, dummy, end_node, loop_start, loop_end, env, remembers
+                s, dummy, end_node, loop_start, loop_end, env, remembers, labels
             )
             if statement is not dummy:
                 dummies.append(dummy)
@@ -383,6 +456,7 @@ def statement_create_cfg(
                 loop_end=next_node,
                 env=env,
                 remembers=remembers,
+                labels=labels,
             )
             remembers.pop()
             env.close_scope()
@@ -399,6 +473,7 @@ def statement_create_cfg(
                 loop_end=next_node,
                 env=env,
                 remembers=remembers,
+                labels=labels,
             )
             remembers.pop()
             env.close_scope()
@@ -408,7 +483,7 @@ def statement_create_cfg(
             remembers.append([])
             if ast[2].type == AstType.declaration:
                 decl = statement_create_cfg(
-                    ast[2], DummyNode(), end_node, None, None, env, remembers
+                    ast[2], DummyNode(), end_node, None, None, env, remembers, labels,
                 )
                 assert isinstance(decl, AssignmentNode)
             else:
@@ -432,6 +507,7 @@ def statement_create_cfg(
                     None,
                     env,
                     remembers,
+                    labels,
                 )
             cond.true_br = statement_create_cfg(
                 ast[5] if inc is None else ast[6],
@@ -441,6 +517,7 @@ def statement_create_cfg(
                 loop_end=next_node,
                 env=env,
                 remembers=remembers,
+                labels=labels,
             )
             remembers.pop()
             env.close_scope()
@@ -459,6 +536,7 @@ def create_cfg(ast: AstNode, requires: Optional[Expr], env: Environment) -> CfgN
 
     end_node = EndNode(None)
     return StartNode(
-        requires, statement_create_cfg(body, end_node, end_node, None, None, env, [])
+        requires,
+        statement_create_cfg(body, end_node, end_node, None, None, env, [], []),
     )
 

@@ -2,7 +2,7 @@
 
 ## TODO
 
-- [ ] handle `switch`
+- [X] handle `switch`
 - [X] properly handle `for`
 - [ ] handle explicit casts
 - [ ] handle implicit casts
