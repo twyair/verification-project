@@ -226,7 +226,7 @@ class CutpointNode(CfgNode):
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class StatementEnvironment:
     next_node: CfgNode
     end_node: EndNode
@@ -242,15 +242,16 @@ class StatementEnvironment:
         next_node: Optional[CfgNode] = None,
         loop_start: Optional[CfgNode] = None,
         loop_end: Optional[CfgNode] = None,
+        labels: Optional[List[Tuple[Optional[Expr], CfgNode]]] = None,
     ) -> "StatementEnvironment":
         return StatementEnvironment(
-            next_node=next_node or self.next_node,
+            next_node=self.next_node if next_node is None else next_node,
+            loop_start=self.loop_start if loop_start is None else loop_start,
+            loop_end=self.loop_end if loop_end is None else loop_end,
+            labels=self.labels if labels is None else labels,
             end_node=self.end_node,
-            loop_start=loop_start or self.loop_start,
-            loop_end=loop_end or self.loop_end,
             env=self.env,
             remembers=self.remembers,
-            labels=self.labels,
         )
 
     def create_cfg(self, ast: AstNode) -> CfgNode:
@@ -278,11 +279,11 @@ class StatementEnvironment:
                 )
             elif ast[0].type == AstType.SWITCH:
                 switch_value = Expr.from_ast(ast[2], self.env)
-                self.labels = []
-                statement = self.replace(loop_end=self.next_node).create_cfg(ast[4])
+                statement_env = self.replace(loop_end=self.next_node, labels=[])
+                statement = statement_env.create_cfg(ast[4])
                 conds: List[CondNode] = []
                 default = self.next_node
-                for case_value, statement in self.labels:
+                for case_value, statement in statement_env.labels:
                     if case_value is None:
                         default = statement
                         continue
