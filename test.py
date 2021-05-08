@@ -40,7 +40,6 @@ class VerifierTests(unittest.TestCase):
             "array_max",
             "max2",
             "max2_float",
-            "insertion_sort",
             "bubble_sort",
         ]:
             with self.subTest(f"test_{f} failed\n"):
@@ -48,6 +47,10 @@ class VerifierTests(unittest.TestCase):
         for f in ["max2_bug", "de_morgan_bug"]:
             with self.subTest(f"test_{f} failed\n"):
                 self.assertFalse(fns[f].check().is_ok())
+
+    def test_insertion_sort(self):
+        fns = main.get_functions("random")
+        self.assertTrue(fns["insertion_sort"].check().is_ok())
 
 
 if __name__ == "__main__":
