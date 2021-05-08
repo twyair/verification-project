@@ -226,306 +226,269 @@ class CutpointNode(CfgNode):
         )
 
 
-def statement_create_cfg(
-    ast: AstNode,
-    next_node: CfgNode,
-    end_node: EndNode,
-    loop_start: Optional[CfgNode],
-    loop_end: Optional[CfgNode],
-    env: Environment,
-    remembers: List[List[Expr]],
-    labels: List[Tuple[Optional[Expr], CfgNode]],
-) -> CfgNode:
-    if ast.type == AstType.labeled_statement:
-        if ast[0].type == AstType.DEFAULT:
-            statement = statement_create_cfg(
-                ast[2],
-                next_node,
-                end_node,
-                loop_start,
-                loop_end,
-                env,
-                remembers,
-                labels,
-            )
-            labels.append((None, statement))
-            return statement
-        else:
-            assert ast[0].type == AstType.CASE
-            value = Expr.from_ast(ast[1], env)
-            statement = statement_create_cfg(
-                ast[3],
-                next_node,
-                end_node,
-                loop_start,
-                loop_end,
-                env,
-                remembers,
-                labels,
-            )
-            labels.append((value, statement))
-            return statement
-    elif ast.type == AstType.semicolon:
-        return next_node
-    elif ast.type == AstType.selection_statement:
-        if ast[0].type == AstType.IF:
-            return CondNode(
-                condition=Expr.from_ast(ast[2], env),
-                true_br=statement_create_cfg(
-                    ast[4],
-                    next_node,
-                    end_node,
-                    loop_start,
-                    loop_end,
-                    env,
-                    remembers,
-                    labels,
-                ),
-                false_br=statement_create_cfg(
-                    ast[6],
-                    next_node,
-                    end_node,
-                    loop_start,
-                    loop_end,
-                    env,
-                    remembers,
-                    labels,
-                )
-                if len(ast.children) == 7
-                else next_node,
-            )
-        elif ast[0].type == AstType.SWITCH:
-            switch_value = Expr.from_ast(ast[2], env)
-            labels = []
-            statement = statement_create_cfg(
-                ast[4],
-                next_node,
-                end_node,
-                loop_start,
-                next_node,
-                env,
-                remembers,
-                labels,
-            )
-            conds: List[CondNode] = []
-            default = next_node
-            for case_value, statement in labels:
-                if case_value is None:
-                    default = next_node
-                    continue
-                dummy = DummyNode()
-                conds.append(
-                    CondNode(RelExpr("==", switch_value, case_value), statement, dummy,)
-                )
-            for cond, next_ in zip(conds, cast(List[CfgNode], conds[1:]) + [default]):
-                cond.false_br = next_
-            return conds[0] if conds else default
-        else:
-            assert False
-    elif ast.type == AstType.compound_statement:
-        env.open_scope()
-        remembers.append([])
-        statements: List[CfgNode] = []
-        dummies: List[DummyNode] = []
-        for s in ast[1].children:
-            dummy = DummyNode()
-            statement = statement_create_cfg(
-                s, dummy, end_node, loop_start, loop_end, env, remembers, labels
-            )
-            if statement is not dummy:
-                dummies.append(dummy)
-                statements.append(statement)
-        statements.append(next_node)
-        for s, s_next, d in zip(statements, statements[1:], dummies):
-            s.replace(d, s_next, set())
-        remembers.pop()
-        env.close_scope()
-        return statements[0]
-    elif ast.type == AstType.jump_statement:
-        # TODO? handle goto
-        if ast[0].type == AstType.BREAK:
-            assert loop_end is not None
-            return loop_end
-        elif ast[0].type == AstType.CONTINUE:
-            assert loop_start is not None
-            return loop_start
-        elif ast[0].type == AstType.RETURN:
-            if len(ast.children) == 3:
-                return AssignmentNode(
-                    expression=Expr.from_ast(ast[1], env),
-                    var=Variable("ret", env["ret"]),
-                    next_node=end_node,
-                )
-            else:
-                return end_node
-        else:
-            assert False
-    elif ast.type == AstType.declaration:
-        # TODO: what about "int x, y;"
-        type_ = ast[0].text
-        # TODO: what about array types?
-        assert type_ is not None
-        type_ = Type(type_)
-        if ast[1].type != AstType.init_declarator:
-            var = ast[1].text
-            assert var is not None
-            env[var] = type_
-            return next_node
-        var = ast[1][0].text
-        assert var is not None
-        value = Expr.from_ast(ast[1][2], env)
-        env[var] = type_
-        return AssignmentNode(
-            expression=value, var=Variable(env.rename(var), type_), next_node=next_node
+@dataclass
+class StatementEnvironment:
+    next_node: CfgNode
+    end_node: EndNode
+    loop_start: Optional[CfgNode]
+    loop_end: Optional[CfgNode]
+    env: Environment
+    remembers: List[List[Expr]]
+    labels: List[Tuple[Optional[Expr], CfgNode]]
+
+    def replace(
+        self,
+        *,
+        next_node: Optional[CfgNode] = None,
+        loop_start: Optional[CfgNode] = None,
+        loop_end: Optional[CfgNode] = None,
+    ) -> "StatementEnvironment":
+        return StatementEnvironment(
+            next_node=next_node or self.next_node,
+            end_node=self.end_node,
+            loop_start=loop_start or self.loop_start,
+            loop_end=loop_end or self.loop_end,
+            env=self.env,
+            remembers=self.remembers,
+            labels=self.labels,
         )
-    elif ast.type == AstType.expression_statement:
-        # TODO: handle ++i, --i, i++, i--
-        if ast[0].type == AstType.postfix_expression:
-            assert (
-                ast[0][1].type == AstType.paren_left
-                and ast[0][0].type == AstType.IDENTIFIER
-            )
-            if ast[0][0].text == "assert":
-                assertion = Expr.from_ast(ast[0][2], env)
-                assertion = reduce(
-                    lambda acc, x: And(acc, x),
-                    chain.from_iterable(remembers),
-                    assertion,
-                )
-                return AssertNode(assertion=assertion, next_node=next_node,)
-            elif ast[0][0].text == "ensures":
-                assert end_node.assertion is None
-                end_node.assertion = Expr.from_ast(ast[0][2], env)
-                return next_node
-            elif ast[0][0].text == "requires":
-                return next_node
-            elif ast[0][0].text == "freeze":
-                args = ast[0][2]
-                right = Expr.from_ast(args[2], env)
-                assert isinstance(right, Variable)
-                assert args[0].type == AstType.IDENTIFIER
-                assert args[0].text is not None
-                env[args[0].text] = right.type_
-                var = Expr.from_ast(args[0], env)
-                assert isinstance(var, Variable)
-                return AssignmentNode(right, var, next_node)
-            elif ast[0][0].text == "remember":
-                remembers[-1].append(Expr.from_ast(ast[0][2], env))
-                return next_node
+
+    def create_cfg(self, ast: AstNode) -> CfgNode:
+        if ast.type == AstType.labeled_statement:
+            if ast[0].type == AstType.DEFAULT:
+                statement = self.create_cfg(ast[2])
+                self.labels.append((None, statement))
+                return statement
             else:
-                assert False, f"unknown function {ast[0][0].text}"
-
-        if ast[0].type != AstType.assignment_expression:
-            # FIXME
-            return next_node
-
-        value = Expr.from_ast(ast[0][2], env)
-        operator = ast[0][1].text
-        assert operator is not None
-        left = Expr.from_ast(ast[0][0], env)
-
-        # TODO? handle chained assignments?
-
-        # handle other assignment operators: *= /= %= += -= >>= <<= &= |= ^=
-        if operator != "=":
-            operator = operator[:-1]
-            value = BinaryExpr(operator=operator, lhs=left, rhs=value)
-
-        if isinstance(left, Variable):
-            return AssignmentNode(expression=value, var=left, next_node=next_node)
-        elif isinstance(left, ArraySelect):
-            # TODO? what about 2d+ arrays?
-            assert isinstance(left.array, Variable)
+                assert ast[0].type == AstType.CASE
+                value = Expr.from_ast(ast[1], self.env)
+                statement = self.create_cfg(ast[3])
+                self.labels.append((value, statement))
+                return statement
+        elif ast.type == AstType.semicolon:
+            return self.next_node
+        elif ast.type == AstType.selection_statement:
+            if ast[0].type == AstType.IF:
+                return CondNode(
+                    condition=Expr.from_ast(ast[2], self.env),
+                    true_br=self.create_cfg(ast[4]),
+                    false_br=self.create_cfg(ast[6])
+                    if len(ast.children) == 7
+                    else self.next_node,
+                )
+            elif ast[0].type == AstType.SWITCH:
+                switch_value = Expr.from_ast(ast[2], self.env)
+                self.labels = []
+                statement = self.replace(loop_end=self.next_node).create_cfg(ast[4])
+                conds: List[CondNode] = []
+                default = self.next_node
+                for case_value, statement in self.labels:
+                    if case_value is None:
+                        default = statement
+                        continue
+                    dummy = DummyNode()
+                    conds.append(
+                        CondNode(
+                            RelExpr("==", switch_value, case_value), statement, dummy,
+                        )
+                    )
+                for cond, next_ in zip(
+                    conds, cast(List[CfgNode], conds[1:]) + [default]
+                ):
+                    cond.false_br = next_
+                return conds[0] if conds else default
+            else:
+                assert False
+        elif ast.type == AstType.compound_statement:
+            self.open_scope()
+            statements: List[CfgNode] = []
+            dummies: List[DummyNode] = []
+            for s in ast[1].children:
+                dummy = DummyNode()
+                statement = self.replace(next_node=dummy).create_cfg(s)
+                if statement is not dummy:
+                    dummies.append(dummy)
+                    statements.append(statement)
+            statements.append(self.next_node)
+            for s, s_next, d in zip(statements, statements[1:], dummies):
+                s.replace(d, s_next, set())
+            self.close_scope()
+            return statements[0]
+        elif ast.type == AstType.jump_statement:
+            # TODO? handle goto
+            if ast[0].type == AstType.BREAK:
+                assert self.loop_end is not None
+                return self.loop_end
+            elif ast[0].type == AstType.CONTINUE:
+                assert self.loop_start is not None
+                return self.loop_start
+            elif ast[0].type == AstType.RETURN:
+                if len(ast.children) == 3:
+                    return AssignmentNode(
+                        expression=Expr.from_ast(ast[1], self.env),
+                        var=Variable("ret", self.env["ret"]),
+                        next_node=self.end_node,
+                    )
+                else:
+                    return self.end_node
+            else:
+                assert False
+        elif ast.type == AstType.declaration:
+            # TODO: what about "int x, y;"
+            type_ = ast[0].text
+            # TODO: what about array types?
+            assert type_ is not None
+            type_ = Type(type_)
+            if ast[1].type != AstType.init_declarator:
+                var = ast[1].text
+                assert var is not None
+                self.env[var] = type_
+                return self.next_node
+            var = ast[1][0].text
+            assert var is not None
+            value = Expr.from_ast(ast[1][2], self.env)
+            self.env[var] = type_
             return AssignmentNode(
-                var=left.array,
-                expression=ArrayStore(array=left.array, index=left.index, value=value),
-                next_node=next_node,
+                expression=value,
+                var=Variable(self.env.rename(var), type_),
+                next_node=self.next_node,
             )
+        elif ast.type == AstType.expression_statement:
+            # TODO: handle ++i, --i, i++, i--
+            if ast[0].type == AstType.postfix_expression:
+                assert (
+                    ast[0][1].type == AstType.paren_left
+                    and ast[0][0].type == AstType.IDENTIFIER
+                )
+                if ast[0][0].text == "assert":
+                    assertion = Expr.from_ast(ast[0][2], self.env)
+                    assertion = reduce(
+                        lambda acc, x: And(acc, x),
+                        chain.from_iterable(self.remembers),
+                        assertion,
+                    )
+                    return AssertNode(assertion=assertion, next_node=self.next_node,)
+                elif ast[0][0].text == "ensures":
+                    assert self.end_node.assertion is None
+                    self.end_node.assertion = Expr.from_ast(ast[0][2], self.env)
+                    return self.next_node
+                elif ast[0][0].text == "requires":
+                    return self.next_node
+                elif ast[0][0].text == "freeze":
+                    args = ast[0][2]
+                    right = Expr.from_ast(args[2], self.env)
+                    assert isinstance(right, Variable)
+                    assert args[0].type == AstType.IDENTIFIER
+                    assert args[0].text is not None
+                    self.env[args[0].text] = right.type_
+                    var = Expr.from_ast(args[0], self.env)
+                    assert isinstance(var, Variable)
+                    return AssignmentNode(right, var, self.next_node)
+                elif ast[0][0].text == "remember":
+                    self.remembers[-1].append(Expr.from_ast(ast[0][2], self.env))
+                    return self.next_node
+                else:
+                    assert False, f"unknown function {ast[0][0].text}"
+
+            if ast[0].type != AstType.assignment_expression:
+                # FIXME
+                return self.next_node
+
+            value = Expr.from_ast(ast[0][2], self.env)
+            operator = ast[0][1].text
+            assert operator is not None
+            left = Expr.from_ast(ast[0][0], self.env)
+
+            # TODO? handle chained assignments?
+
+            # handle other assignment operators: *= /= %= += -= >>= <<= &= |= ^=
+            if operator != "=":
+                operator = operator[:-1]
+                value = BinaryExpr(operator=operator, lhs=left, rhs=value)
+
+            if isinstance(left, Variable):
+                return AssignmentNode(
+                    expression=value, var=left, next_node=self.next_node
+                )
+            elif isinstance(left, ArraySelect):
+                # TODO? what about 2d+ arrays?
+                assert isinstance(left.array, Variable)
+                return AssignmentNode(
+                    var=left.array,
+                    expression=ArrayStore(
+                        array=left.array, index=left.index, value=value
+                    ),
+                    next_node=self.next_node,
+                )
+            else:
+                assert False
+        elif ast.type == AstType.iteration_statement:
+            if ast[0].type == AstType.WHILE:
+                self.open_scope()
+                while_node = CondNode(
+                    Expr.from_ast(ast[2], self.env), DummyNode(), self.next_node
+                )
+                while_node.true_br = self.replace(
+                    next_node=while_node, loop_start=while_node, loop_end=self.next_node
+                ).create_cfg(ast[4])
+                self.close_scope()
+                return while_node
+            elif ast[0].type == AstType.DO:
+                self.open_scope()
+                cond = CondNode(
+                    Expr.from_ast(ast[4], self.env), DummyNode(), self.next_node
+                )
+                cond.true_br = self.replace(
+                    next_node=cond, loop_start=cond, loop_end=self.next_node
+                ).create_cfg(ast[1])
+                self.close_scope()
+                return cond.true_br
+            elif ast[0].type == AstType.FOR:
+                self.open_scope()
+                if ast[2].type == AstType.declaration:
+                    decl = self.replace(
+                        next_node=DummyNode(), loop_start=None, loop_end=None
+                    ).create_cfg(ast[2])
+                    assert isinstance(decl, AssignmentNode)
+                else:
+                    assert ast[2].type == AstType.semicolon
+                    decl = None
+                if ast[3].type == AstType.expression_statement:
+                    cond = CondNode(
+                        Expr.from_ast(ast[3][0], self.env), DummyNode(), self.next_node
+                    )
+                else:
+                    assert ast[3].type == AstType.semicolon
+                    cond = CondNode(BoolValue(True), DummyNode(), self.next_node)
+                if decl is not None:
+                    decl.next_node = cond
+                if ast[4].type == AstType.paren_right:
+                    inc = None
+                else:
+                    inc = self.replace(
+                        next_node=cond, loop_start=None, loop_end=None
+                    ).create_cfg(
+                        AstNode(
+                            None, AstType.expression_statement, ast[4].range, [ast[4]]
+                        )
+                    )
+                cond.true_br = self.replace(
+                    next_node=inc or cond, loop_start=cond, loop_end=self.next_node
+                ).create_cfg(ast[5] if inc is None else ast[6])
+                self.close_scope()
+                return decl or cond
+            else:
+                assert False
         else:
             assert False
-    elif ast.type == AstType.iteration_statement:
-        if ast[0].type == AstType.WHILE:
-            env.open_scope()
-            remembers.append([])
-            while_node = CondNode(Expr.from_ast(ast[2], env), DummyNode(), next_node)
-            while_node.true_br = statement_create_cfg(
-                ast[4],
-                while_node,
-                end_node,
-                loop_start=while_node,
-                loop_end=next_node,
-                env=env,
-                remembers=remembers,
-                labels=labels,
-            )
-            remembers.pop()
-            env.close_scope()
-            return while_node
-        elif ast[0].type == AstType.DO:
-            env.open_scope()
-            remembers.append([])
-            cond = CondNode(Expr.from_ast(ast[4], env), DummyNode(), next_node)
-            cond.true_br = statement_create_cfg(
-                ast[1],
-                cond,
-                end_node,
-                loop_start=cond,
-                loop_end=next_node,
-                env=env,
-                remembers=remembers,
-                labels=labels,
-            )
-            remembers.pop()
-            env.close_scope()
-            return cond.true_br
-        elif ast[0].type == AstType.FOR:
-            env.open_scope()
-            remembers.append([])
-            if ast[2].type == AstType.declaration:
-                decl = statement_create_cfg(
-                    ast[2], DummyNode(), end_node, None, None, env, remembers, labels,
-                )
-                assert isinstance(decl, AssignmentNode)
-            else:
-                assert ast[2].type == AstType.semicolon
-                decl = None
-            if ast[3].type == AstType.expression_statement:
-                cond = CondNode(Expr.from_ast(ast[3][0], env), DummyNode(), next_node)
-            else:
-                assert ast[3].type == AstType.semicolon
-                cond = CondNode(BoolValue(True), DummyNode(), next_node)
-            if decl is not None:
-                decl.next_node = cond
-            if ast[4].type == AstType.paren_right:
-                inc = None
-            else:
-                inc = statement_create_cfg(
-                    AstNode(None, AstType.expression_statement, ast[4].range, [ast[4]]),
-                    cond,
-                    end_node,
-                    None,
-                    None,
-                    env,
-                    remembers,
-                    labels,
-                )
-            cond.true_br = statement_create_cfg(
-                ast[5] if inc is None else ast[6],
-                inc or cond,
-                end_node,
-                loop_start=cond,
-                loop_end=next_node,
-                env=env,
-                remembers=remembers,
-                labels=labels,
-            )
-            remembers.pop()
-            env.close_scope()
-            return decl or cond
-        else:
-            assert False
-    else:
-        assert False
+
+    def open_scope(self):
+        self.env.open_scope()
+        self.remembers.append([])
+
+    def close_scope(self):
+        self.remembers.pop()
+        self.env.close_scope()
 
 
 def create_cfg(ast: AstNode, requires: Optional[Expr], env: Environment) -> CfgNode:
@@ -537,6 +500,8 @@ def create_cfg(ast: AstNode, requires: Optional[Expr], env: Environment) -> CfgN
     end_node = EndNode(None)
     return StartNode(
         requires,
-        statement_create_cfg(body, end_node, end_node, None, None, env, [], []),
+        StatementEnvironment(end_node, end_node, None, None, env, [], []).create_cfg(
+            body
+        ),
     )
 
