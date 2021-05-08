@@ -208,6 +208,15 @@ class Expr:
                 value_true=Expr.from_ast(ast[2], env),
                 value_false=Expr.from_ast(ast[4], env),
             )
+        elif ast.type == AstType.cast_expression:
+            ty = Type(ast[1].text)
+            expr = Expr.from_ast(ast[3], env)
+            if ty == Type.int:
+                return AsInt(expr)
+            elif ty == Type.float:
+                return AsReal(expr)
+            else:
+                assert False, f"can't cast expr to type {ty}"
         else:
             assert False, f"unknown type {ast.type.value}"
 
@@ -380,6 +389,34 @@ class UnaryExpr(Expr):
 
     def as_z3(self) -> z3.ExprRef:
         return self.SYM2OPERATOR[self.operator](self.operand.as_z3())
+
+
+@dataclass(frozen=True)
+class AsInt(Expr):
+    expr: Expr
+
+    def assign(self, vars: Dict[str, Expr]) -> "AsInt":
+        return AsInt(self.expr.assign(vars))
+
+    def __str__(self) -> str:
+        return f"int({self.expr})"
+
+    def as_z3(self):
+        return z3.ToInt(self.expr.as_z3())
+
+
+@dataclass(frozen=True)
+class AsReal(Expr):
+    expr: Expr
+
+    def assign(self, vars: Dict[str, Expr]) -> "AsReal":
+        return AsReal(self.expr.assign(vars))
+
+    def __str__(self) -> str:
+        return f"real({self.expr})"
+
+    def as_z3(self):
+        return z3.ToReal(self.expr.as_z3())
 
 
 @dataclass(frozen=True)
