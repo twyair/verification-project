@@ -357,11 +357,12 @@ class StatementEnvironment:
         elif ast.type == AstType.expression_statement:
             # TODO: handle ++i, --i, i++, i--
             if ast[0].type == AstType.postfix_expression:
+                fn = ast[0][0].text
                 assert (
                     ast[0][1].type == AstType.paren_left
                     and ast[0][0].type == AstType.IDENTIFIER
                 )
-                if ast[0][0].text == "assert":
+                if fn == "assert":
                     assertion = Expr.from_ast(ast[0][2], self.env)
                     assertion = reduce(
                         lambda acc, x: And(acc, x),
@@ -369,27 +370,41 @@ class StatementEnvironment:
                         assertion,
                     )
                     return AssertNode(assertion=assertion, next_node=self.next_node,)
-                elif ast[0][0].text == "ensures":
+                elif fn == "ensures":
                     assert self.end_node.assertion is None
                     self.end_node.assertion = Expr.from_ast(ast[0][2], self.env)
                     return self.next_node
-                elif ast[0][0].text == "requires":
+                elif fn == "requires":
                     return self.next_node
-                elif ast[0][0].text == "freeze":
+                elif fn == "freeze":
                     args = ast[0][2]
                     right = Expr.from_ast(args[2], self.env)
-                    assert isinstance(right, Variable)
                     assert args[0].type == AstType.IDENTIFIER
                     assert args[0].text is not None
-                    self.env[args[0].text] = right.type_
+                    # TODO: support all exprs
+                    if isinstance(right, Variable):
+                        ty = right.type_
+                    elif isinstance(right, ArraySelect) and isinstance(
+                        right.array, Variable
+                    ):
+                        ty = {
+                            Type.array_bool: Type.bool,
+                            Type.array_float: Type.float,
+                            Type.array_int: Type.int,
+                        }[right.array.type_]
+                    else:
+                        assert (
+                            False
+                        ), f"freezing the following expr isn't supported: {right}"
+                    self.env[args[0].text] = ty
                     var = Expr.from_ast(args[0], self.env)
                     assert isinstance(var, Variable)
                     return AssignmentNode(right, var, self.next_node)
-                elif ast[0][0].text == "remember":
+                elif fn == "remember":
                     self.remembers[-1].append(Expr.from_ast(ast[0][2], self.env))
                     return self.next_node
                 else:
-                    assert False, f"unknown function {ast[0][0].text}"
+                    assert False, f"unknown function {fn}"
 
             if ast[0].type != AstType.assignment_expression:
                 # FIXME

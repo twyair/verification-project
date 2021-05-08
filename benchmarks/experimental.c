@@ -148,17 +148,17 @@ void insertion_sort_permutation(int arr[], int perm[], int size) {
             );
             j += 1;
         }
-        int p = perm[i];
+        phantom(int p = perm[i]);
         for (int k = i; k > j; k -= 1) {
             arr[k] = arr[k - 1];
-            perm[k] = perm[k - 1];
+            phantom(perm[k] = perm[k - 1]);
             assert(
                 ARR[p] == curr
                 && p < size && p >= 0
             );
         }
         arr[j] = curr;
-        perm[j] = p;
+        phantom(perm[j] = p);
         assert(true);
     }
 }
