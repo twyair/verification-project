@@ -8,5 +8,6 @@
 - [ ] support implicit casts
 - [ ] handle fixed size ints as bitvectors
 - [ ] implement an `is_nan()` operator
-- [ ] implement phantom variables
+- [X] implement phantom variables
+- [X] implement `assume()`
 - [ ] make the parser work with float literals

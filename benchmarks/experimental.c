@@ -128,9 +128,11 @@ void additive_factorial(int n, int results[]) {
     }
 }
 
-void insertion_sort_permutation(int arr[], int perm[], int size) {
-    requires(size > 0 && forall(k, range(0, size), perm[k] == k));
+void insertion_sort_permutation(int arr[], int size) {
+    requires(size > 0);
     freeze(ARR, arr);
+    phantom(int perm[]);
+    assume(forall(k, range(0, size), perm[k] == k));
     ensures(
         forall(k, range(0, size), perm[k] < size && perm[k] >= 0 && arr[k] == ARR[perm[k]])
     );

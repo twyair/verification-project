@@ -11,6 +11,7 @@ from cast import AstNode, AstType
 from cfg import (
     AssertNode,
     AssignmentNode,
+    AssumeNode,
     BasicPath,
     CfgNode,
     CondNode,
@@ -282,6 +283,16 @@ class Function:
                 )
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
+            elif isinstance(node, AssumeNode):
+                add_node(
+                    id_,
+                    color="pink",
+                    label="assume",
+                    shape="circle",
+                    content=f"{node.expression}",
+                )
+                graph.add_edge(id_, get_id(node.next_node))
+                traverse(node.next_node)
             elif isinstance(node, DummyNode):
                 add_node(
                     id_, color="yellow", label="dummy", shape="star", content="???"
@@ -306,11 +317,7 @@ class Function:
             if id_ in id2node:
                 return
             id2node[id_] = node
-            if isinstance(node, StartNode):
-                graph.add_node(id_,)
-                graph.add_edge(id_, get_id(node.next_node))
-                traverse(node.next_node)
-            elif isinstance(node, AssignmentNode):
+            if isinstance(node, (StartNode, AssignmentNode, AssertNode, AssumeNode)):
                 graph.add_node(id_,)
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
@@ -322,10 +329,6 @@ class Function:
                 traverse(node.false_br)
             elif isinstance(node, EndNode):
                 graph.add_node(id_,)
-            elif isinstance(node, AssertNode):
-                graph.add_node(id_,)
-                graph.add_edge(id_, get_id(node.next_node))
-                traverse(node.next_node)
             elif isinstance(node, DummyNode):
                 graph.add_node(id_)
             else:
@@ -369,7 +372,8 @@ class Function:
             for n in graph.predecessors(cp):
                 node = id2node[n]
                 if isinstance(
-                    node, (AssertNode, AssignmentNode, StartNode, CutpointNode)
+                    node,
+                    (AssertNode, AssignmentNode, StartNode, CutpointNode, AssumeNode),
                 ):
                     node.next_node = new_node
                 elif isinstance(node, CondNode):

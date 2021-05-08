@@ -186,6 +186,26 @@ class AssignmentNode(CfgNode):
 
 
 @dataclass
+class AssumeNode(CfgNode):
+    expression: Expr
+    next_node: CfgNode
+
+    def generate_paths(
+        self, path: BasicPath, visited_asserts: Set[int],
+    ) -> Iterator[BasicPath]:
+        yield from self.next_node.generate_paths(
+            path.condition(self.expression), visited_asserts
+        )
+
+    def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
+        if id(self) in visited:
+            return self
+        if dummy is self.next_node:
+            self.next_node = node
+        self.next_node.replace(dummy, node, visited)
+
+
+@dataclass
 class AssertNode(CfgNode):
     assertion: Expr
     next_node: CfgNode
@@ -337,14 +357,24 @@ class StatementEnvironment:
         elif ast.type == AstType.declaration:
             # TODO: what about "int x, y;"
             type_ = ast[0].text
-            # TODO: what about array types?
             assert type_ is not None
+
+            if (
+                ast[1].type == AstType.direct_declarator
+                and ast[1][1].type == AstType.bracket_left
+            ):
+                var = ast[1][0].text
+                assert var is not None
+                self.env[var] = Type("array_" + type_)
+                return self.next_node
+
             type_ = Type(type_)
-            if ast[1].type != AstType.init_declarator:
+            if ast[1].type == AstType.IDENTIFIER:
                 var = ast[1].text
                 assert var is not None
                 self.env[var] = type_
                 return self.next_node
+
             var = ast[1][0].text
             assert var is not None
             value = Expr.from_ast(ast[1][2], self.env)
@@ -403,6 +433,10 @@ class StatementEnvironment:
                 elif fn == "remember":
                     self.remembers[-1].append(Expr.from_ast(ast[0][2], self.env))
                     return self.next_node
+                elif fn == "assume":
+                    return AssumeNode(
+                        Expr.from_ast(ast[0][2], self.env), self.next_node
+                    )
                 else:
                     assert False, f"unknown function {fn}"
 
