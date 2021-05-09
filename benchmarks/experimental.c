@@ -69,21 +69,27 @@ void merge(int arr1[], int arr2[], int res[], int size1, int size2) {
         && forall(t, range(0, size2 - 1), arr2[t] <= arr2[t+1])
     );
     ensures(forall(t, range(size1 + size2 - 1), res[t] <= res[t+1]));
+
+    phantom(int perm1[]);
+    phantom(int perm2[]);
+
     int i = 0;
     int j = 0;
     while (i < size1 || j < size2) {
         assert(
             i >= 0 && j >= 0 && i <= size1 && j <= size2
             && (i < size1 || j < size2)
-            && forall(t, range(0, i), exists(s, range(0, i + j), arr1[t] == res[s]))
-            && forall(t, range(0, j), exists(s, range(0, i + j), arr2[t] == res[s]))
+            && then(i < size1 && i + j > 0, res[i + j - 1] <= arr1[i])
+            && then(j < size2 && i + j > 0, res[i + j - 1] <= arr2[j])
             && forall(t, range(0, i + j - 1), res[t] <= res[t + 1])
         );
-        if (j >= size2 || arr1[i] < arr2[j]) {
+        if (j >= size2 || i < size1 && arr1[i] < arr2[j]) {
             res[i + j] = arr1[i];
+            phantom(perm1[i] = i + j);
             i += 1;
         } else {
             res[i + j] = arr2[j];
+            phantom(perm2[j] = i + j);
             j += 1;
         }
     }
