@@ -41,6 +41,7 @@ class VerifierTests(unittest.TestCase):
             "max2",
             "max2_float",
             "bubble_sort",
+            "merge",
         ]:
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check().is_ok())
@@ -48,6 +49,7 @@ class VerifierTests(unittest.TestCase):
             with self.subTest(f"test_{f} failed\n"):
                 self.assertFalse(fns[f].check().is_ok())
 
+    @unittest.skip("takes forever")
     def test_insertion_sort(self):
         fns = main.get_functions("random")
         self.assertTrue(fns["insertion_sort"].check().is_ok())
