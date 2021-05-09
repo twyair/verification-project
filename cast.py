@@ -25,6 +25,7 @@ class AstType(enum.Enum):
     neg = "~"
     question_mark = "?"
     colon = ":"
+    STRING_LITERAL = "STRING_LITERAL"
     EXTERN = "EXTERN"
     CONSTANT = "CONSTANT"
     ELSE = "ELSE"

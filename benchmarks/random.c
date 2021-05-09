@@ -296,7 +296,6 @@ void insertion_sort(int arr[], int size) {
                 && forall(t, range(0, size), then(t != p, perm[perm_rev[t]] == t))
                 && forall(t, range(0, size), then(t != p, perm_rev[t] != k - 1))
                 && k <= i && k > j
-                && j >= 0 && j < size
             );
         }
         arr[j] = curr;

@@ -9,19 +9,41 @@ int sqrt_v3(int num) {
     freeze(NUM, num);
     ensures(ret * ret <= NUM && (ret + 1) * (ret + 1) > NUM);
 
+    phantom(int pow4[]);
+    phantom(int pow4_index = 0);
+
     int bit = 1;
+    phantom(pow4[0] = 1);
     while (bit * 4 <= num){
         assert(
             NUM > 1
             && num == NUM
-            && forall(k, range(1, bit + 1), k * 4 <= num)
+            && pow4[pow4_index] == bit
+            && forall(i, range(1, pow4_index + 1), pow4[i] == 4 * pow4[i - 1])
+            && pow4[0] == 1
+            && bit * 4 <= num
+            && pow4_index >= 0
         );
         bit *= 4;
+        phantom(pow4_index += 1);
+        phantom(pow4[pow4_index] = bit);
     }
+
+    assert(NUM > 1 && num == NUM && bit * 4 > num && bit <= num && pow4[pow4_index] == bit && forall(i, range(1, pow4_index + 1), pow4[i] == 4 * pow4[i - 1]) && pow4[0] == 1 && pow4_index >= 0);
 
     int res = 0;
     while (bit != 0) {
-        assert(res >= 0 && num >= 0 && NUM > 1 && bit > 0 && num == NUM - res * res / bit / 4);
+        assert(
+            res >= 0
+            && num >= 0
+            && NUM > 1
+            && bit > 0
+            && num * 4 * bit == NUM * 4 * bit - res * res
+            && pow4[pow4_index] == bit
+            && forall(i, range(1, pow4_index + 1), pow4[i] == 4 * pow4[i - 1])
+            && pow4[0] == 1
+            && pow4_index >= 0
+        );
         if (num >= res + bit) {
             num -= res + bit;
             res = res / 2 + bit;
@@ -29,6 +51,7 @@ int sqrt_v3(int num) {
             res /= 2;
         }
         bit /= 4;
+        phantom(pow4_index -= 1);
     }
 
     return res;
