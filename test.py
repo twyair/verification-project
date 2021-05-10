@@ -30,8 +30,8 @@ class VerifierTests(unittest.TestCase):
             "is_prime",
             "array_reverse",
             "vector_add",
-            "sqrt_v1",
             "sqrt_v2",
+            "sqrt_v1",
             "partition",
             "mccarthy_91",
             "de_morgan",
@@ -49,10 +49,9 @@ class VerifierTests(unittest.TestCase):
             with self.subTest(f"test_{f} failed\n"):
                 self.assertFalse(fns[f].check().is_ok())
 
-    @unittest.skip("takes forever")
     def test_insertion_sort(self):
         fns = main.get_functions("random")
-        self.assertTrue(fns["insertion_sort"].check().is_ok())
+        self.assertTrue(fns["insertion_sort"].check_iter().is_ok())
 
 
 if __name__ == "__main__":

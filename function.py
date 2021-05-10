@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from functools import reduce
 import itertools
-from typing import Dict, List, Optional, Set, cast
+from typing import Dict, Iterator, List, Optional, Set, Tuple, cast
 
 import z3
 from pygraphviz.agraph import AGraph
@@ -40,7 +40,12 @@ class CheckResult:
 
 
 @dataclass(frozen=True)
-class Unknown(CheckResult):
+class Fail(CheckResult):
+    pass
+
+
+@dataclass(frozen=True)
+class Unknown(Fail):
     code: int
 
 
@@ -59,12 +64,12 @@ class HornOk(CheckResult):
 
 
 @dataclass(frozen=True)
-class HornFail(CheckResult):
+class HornFail(Fail):
     pass
 
 
 @dataclass(frozen=True)
-class CounterExample(CheckResult):
+class CounterExample(Fail):
     model: z3.ModelRef
 
 
@@ -151,16 +156,14 @@ class Function:
             for path in self.cfg.generate_paths(BasicPath.empty(), set())
         ]
 
-    def get_failing_props(self) -> List[Expr]:
+    def get_failing_props(self) -> Iterator[Expr]:
         assert not self.horn
-        props: List[Expr] = []
         for path in self.cfg.generate_paths(BasicPath.empty(), set()):
             prop = path.get_proof_rule()
             solver = z3.Solver()
             solver.add(z3.Not(prop.as_z3()))
             if solver.check().r != -1:
-                props.append(prop)
-        return props
+                yield prop
 
     def check(self) -> CheckResult:
         """
@@ -189,6 +192,13 @@ class Function:
                 return Ok()
             else:
                 return Unknown(result.r)
+
+    def check_iter(self) -> CheckResult:
+        prop = next(self.get_failing_props(), None)
+        if prop is None:
+            return Ok()
+        else:
+            return Fail()
 
     def draw_cfg(self, no_content=False):
         filepath = f"cfg-img/{self.name}.svg"
