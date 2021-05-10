@@ -28,8 +28,8 @@ from expr import (
 class BasicPath:
     reachability: List[Expr]
     transformation: Dict[str, Expr]
-    assertion_start: Optional[Prop]
-    assertion_end: Optional[Prop]
+    assertion_start: Optional[Expr]
+    assertion_end: Optional[Expr]
 
     @staticmethod
     def empty() -> "BasicPath":
@@ -59,20 +59,24 @@ class BasicPath:
     def assert_end(self, prop: Expr) -> "BasicPath":
         return dataclasses.replace(self, assertion_end=prop.assign(self.transformation))
 
-    def get_proof_rule(self) -> Prop:
+    def get_proof_rule(self) -> Expr:
         assert self.assertion_end is not None
         # FIXME: handle the case when `reachability` is empty
         if self.assertion_start is not None:
             return Then(
-                reduce(
-                    lambda acc, x: And(acc, x), self.reachability, self.assertion_start,
-                ),
+                And(tuple(self.reachability) + (self.assertion_start,)),
                 self.assertion_end,
             )
         else:
-            return Then(
-                reduce(lambda acc, x: And(acc, x), self.reachability, BoolValue(True),),
-                self.assertion_end,
+            return (
+                Then(
+                    And(tuple(self.reachability))
+                    if len(self.reachability) >= 2
+                    else self.reachability[0],
+                    self.assertion_end,
+                )
+                if self.reachability
+                else self.assertion_end
             )
 
 
@@ -394,10 +398,9 @@ class StatementEnvironment:
                 )
                 if fn == "assert":
                     assertion = Expr.from_ast(ast[0][2], self.env)
-                    assertion = reduce(
-                        lambda acc, x: And(acc, x),
-                        chain.from_iterable(self.remembers),
-                        assertion,
+                    remembers = tuple(chain.from_iterable(self.remembers))
+                    assertion = (
+                        And(remembers + (assertion,)) if remembers else assertion
                     )
                     return AssertNode(assertion=assertion, next_node=self.next_node,)
                 elif fn == "ensures":

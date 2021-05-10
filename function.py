@@ -132,12 +132,11 @@ class Function:
 
     def get_proof_rule(self) -> Expr:
         assert not self.horn
-        rule = reduce(
-            lambda acc, x: And(acc, x),
-            [
+        rule = And(
+            tuple(
                 path.get_proof_rule()
                 for path in self.cfg.generate_paths(BasicPath.empty(), set())
-            ],
+            )
         )
         if self.vars:
             return ForAll(self.vars, rule)
@@ -152,9 +151,9 @@ class Function:
             for path in self.cfg.generate_paths(BasicPath.empty(), set())
         ]
 
-    def get_failing_props(self) -> List[Prop]:
+    def get_failing_props(self) -> List[Expr]:
         assert not self.horn
-        props: List[Prop] = []
+        props: List[Expr] = []
         for path in self.cfg.generate_paths(BasicPath.empty(), set()):
             prop = path.get_proof_rule()
             solver = z3.Solver()

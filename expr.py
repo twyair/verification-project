@@ -112,9 +112,9 @@ class Expr:
                 return BoolValue(ast.text == "true")
             return Variable(env.rename(ast.text), env[ast.text])
         elif ast.type == AstType.logical_and_expression:
-            return And(lhs=Expr.from_ast(ast[0], env), rhs=Expr.from_ast(ast[2], env),)
+            return And((Expr.from_ast(ast[0], env), Expr.from_ast(ast[2], env)))
         elif ast.type == AstType.logical_or_expression:
-            return Or(lhs=Expr.from_ast(ast[0], env), rhs=Expr.from_ast(ast[2], env),)
+            return Or((Expr.from_ast(ast[0], env), Expr.from_ast(ast[2], env)))
         elif ast.type == AstType.primary_expression:
             return Expr.from_ast(ast[1], env)
         elif ast.type == AstType.postfix_expression:
@@ -254,38 +254,36 @@ class RelExpr(Expr):
 
 @dataclass(frozen=True)
 class And(Expr):
-    lhs: Expr
-    rhs: Expr
+    args: Tuple[Expr, ...]
 
     def assign(self, vars: Dict[str, Expr]) -> "And":
-        return And(rhs=self.rhs.assign(vars), lhs=self.lhs.assign(vars))
+        return And(args=tuple(a.assign(vars) for a in self.args))
 
     def __str__(self) -> str:
         return " ∧ ".join(
             f"{p}" if isinstance(p, (And, Not, Variable, BoolValue)) else f"({p})"
-            for p in [self.lhs, self.rhs]
+            for p in self.args
         )
 
     def as_z3(self):
-        return z3.And(self.lhs.as_z3(), self.rhs.as_z3())
+        return z3.And(*(a.as_z3() for a in self.args))
 
 
 @dataclass(frozen=True)
 class Or(Expr):
-    lhs: Expr
-    rhs: Expr
+    args: Tuple[Expr, ...]
 
     def assign(self, vars: Dict[str, Expr]) -> "Or":
-        return Or(rhs=self.rhs.assign(vars), lhs=self.lhs.assign(vars))
+        return Or(tuple(a.assign(vars) for a in self.args))
 
     def __str__(self) -> str:
         return " ∨ ".join(
             f"{p}" if isinstance(p, (And, Or, Not, Variable, BoolValue)) else f"({p})"
-            for p in [self.lhs, self.rhs]
+            for p in self.args
         )
 
     def as_z3(self):
-        return z3.Or(self.lhs.as_z3(), self.rhs.as_z3())
+        return z3.Or(*(a.as_z3() for a in self.args))
 
 
 @dataclass(frozen=True)
