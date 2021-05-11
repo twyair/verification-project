@@ -414,22 +414,7 @@ class StatementEnvironment:
                     right = Expr.from_ast(args[2], self.env)
                     assert args[0].type == AstType.IDENTIFIER
                     assert args[0].text is not None
-                    # TODO: support all exprs
-                    if isinstance(right, Variable):
-                        ty = right.type_
-                    elif isinstance(right, ArraySelect) and isinstance(
-                        right.array, Variable
-                    ):
-                        ty = {
-                            Type.array_bool: Type.bool,
-                            Type.array_float: Type.float,
-                            Type.array_int: Type.int,
-                        }[right.array.type_]
-                    else:
-                        assert (
-                            False
-                        ), f"freezing the following expr isn't supported: {right}"
-                    self.env[args[0].text] = ty
+                    self.env[args[0].text] = right.get_type()
                     var = Expr.from_ast(args[0], self.env)
                     assert isinstance(var, Variable)
                     return AssignmentNode(right, var, self.next_node)

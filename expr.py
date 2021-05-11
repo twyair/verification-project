@@ -96,6 +96,9 @@ class Expr:
     def as_z3(self):
         raise NotImplementedError
 
+    def get_type(self) -> Type:
+        raise NotImplementedError
+
     @staticmethod
     def from_ast(ast: AstNode, env: Environment) -> "Expr":
         if ast.type in (AstType.relational_expression, AstType.equality_expression):
@@ -251,6 +254,9 @@ class RelExpr(Expr):
     def as_z3(self) -> z3.ExprRef:
         return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
 
+    def get_type(self) -> Type:
+        return Type.bool
+
 
 @dataclass(frozen=True)
 class And(Expr):
@@ -267,6 +273,9 @@ class And(Expr):
 
     def as_z3(self):
         return z3.And(*(a.as_z3() for a in self.args))
+
+    def get_type(self) -> Type:
+        return Type.bool
 
 
 @dataclass(frozen=True)
@@ -285,6 +294,9 @@ class Or(Expr):
     def as_z3(self):
         return z3.Or(*(a.as_z3() for a in self.args))
 
+    def get_type(self) -> Type:
+        return Type.bool
+
 
 @dataclass(frozen=True)
 class Not(Expr):
@@ -298,6 +310,9 @@ class Not(Expr):
 
     def as_z3(self):
         return z3.Not(self.operand.as_z3())
+
+    def get_type(self) -> Type:
+        return Type.bool
 
 
 @dataclass(frozen=True)
@@ -313,6 +328,9 @@ class Variable(Expr):
 
     def as_z3(self) -> z3.ExprRef:
         return z3.Const(self.var, self.type_.as_z3())
+
+    def get_type(self) -> Type:
+        return self.type_
 
 
 @dataclass(frozen=True)
@@ -365,6 +383,9 @@ class BinaryExpr(Expr):
     def as_z3(self) -> z3.ExprRef:
         return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
 
+    def get_type(self) -> Type:
+        return self.lhs.get_type()
+
 
 @dataclass(frozen=True)
 class UnaryExpr(Expr):
@@ -390,6 +411,9 @@ class UnaryExpr(Expr):
     def as_z3(self) -> z3.ExprRef:
         return self.SYM2OPERATOR[self.operator](self.operand.as_z3())
 
+    def get_type(self) -> Type:
+        return self.operand.get_type()
+
 
 @dataclass(frozen=True)
 class AsInt(Expr):
@@ -403,6 +427,9 @@ class AsInt(Expr):
 
     def as_z3(self):
         return z3.ToInt(self.expr.as_z3())
+
+    def get_type(self) -> Type:
+        return Type.int
 
 
 @dataclass(frozen=True)
@@ -418,6 +445,9 @@ class AsReal(Expr):
     def as_z3(self):
         return z3.ToReal(self.expr.as_z3())
 
+    def get_type(self) -> Type:
+        return Type.float
+
 
 @dataclass(frozen=True)
 class IntValue(Expr):
@@ -431,6 +461,9 @@ class IntValue(Expr):
 
     def as_z3(self) -> z3.ExprRef:
         return z3.IntVal(int(self.number))
+
+    def get_type(self) -> Type:
+        return Type.int
 
 
 @dataclass(frozen=True)
@@ -446,6 +479,9 @@ class RealValue(Expr):
     def as_z3(self) -> z3.ExprRef:
         return z3.FPVal(self.number)
 
+    def get_type(self) -> Type:
+        return Type.float
+
 
 @dataclass(frozen=True)
 class BoolValue(Expr):
@@ -459,6 +495,9 @@ class BoolValue(Expr):
 
     def as_z3(self) -> z3.ExprRef:
         return z3.BoolVal(self.value)
+
+    def get_type(self) -> Type:
+        return Type.bool
 
 
 @dataclass(frozen=True)
@@ -482,6 +521,9 @@ class IfThenElse(Expr):
             self.condition.as_z3(), self.value_true.as_z3(), self.value_false.as_z3()
         )
 
+    def get_type(self) -> Type:
+        return Type.bool
+
 
 @dataclass(frozen=True)
 class ArrayStore(Expr):
@@ -502,6 +544,17 @@ class ArrayStore(Expr):
     def as_z3(self) -> z3.ExprRef:
         return z3.Store(self.array.as_z3(), self.index.as_z3(), self.value.as_z3())
 
+    def get_type(self) -> Type:
+        ty = self.array.get_type()
+        if ty == Type.array_int:
+            return Type.int
+        elif ty == Type.array_float:
+            return Type.float
+        elif ty == Type.array_bool:
+            return Type.bool
+        else:
+            assert False
+
 
 @dataclass(frozen=True)
 class ArraySelect(Expr):
@@ -516,6 +569,17 @@ class ArraySelect(Expr):
 
     def as_z3(self) -> z3.ExprRef:
         return z3.Select(self.array.as_z3(), self.index.as_z3())
+
+    def get_type(self) -> Type:
+        ty = self.array.get_type()
+        if ty == Type.array_int:
+            return Type.int
+        elif ty == Type.array_float:
+            return Type.float
+        elif ty == Type.array_bool:
+            return Type.bool
+        else:
+            assert False
 
 
 @dataclass(frozen=True)
