@@ -57,45 +57,6 @@ int sqrt_v3(int num) {
     return res;
 }
 
-/*
- * taken from [https://github.com/dafny-lang/dafny/blob/master/Test/dafny4/BinarySearch.dfy]
- * FIXME: verification hangs
- */
-int binary_search(int arr[], int size, int key) {
-    requires(
-        size > 0
-        && forall(k, range(0, size - 1), arr[k] <= arr[k + 1])
-    );
-    remember(
-        size > 0
-        && forall(k, range(0, size - 1), arr[k] <= arr[k + 1])
-    );
-    ensures(then(
-        exists(k, range(0, size), arr[k] == key),
-        arr[ret] == key && ret < size && ret >= 0
-    ));
-    int lo = 0;
-    int hi = size;
-    while (lo < hi) {
-        assert(
-            lo >= 0
-            && hi > lo
-            && hi <= size
-            && forall(k, range(0, lo), arr[k] < key)
-            && forall(k, range(hi, size), arr[k] > key)
-        );
-        int mid = (lo + hi) / 2;
-        if (key < arr[mid]) {
-            hi = mid;
-        } else if (arr[mid] < key) {
-            lo = mid + 1;
-        } else {
-            return mid;
-        }
-    }
-    return -1;
-}
-
 // taken from [https://github.com/dafny-lang/dafny/blob/master/Test/dafny2/Classics.dfy]
 // FIXME:
 void additive_factorial(int n, int results[]) {

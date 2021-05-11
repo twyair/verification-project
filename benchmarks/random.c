@@ -221,6 +221,42 @@ int mccarthy_91(int n) {
     return n;
 }
 
+int binary_search(int arr[], int size, int key) {
+    requires(
+        size > 0
+        && forall(k, range(0, size), forall(t, range(0, k + 1), arr[t] <= arr[k]))
+    );
+    remember(
+        size > 0
+        && forall(k, range(0, size), forall(t, range(0, k + 1), arr[t] <= arr[k]))
+    );
+    ensures(then(
+        exists(k, range(0, size), arr[k] == key),
+        arr[ret] == key && ret < size && ret >= 0,
+        ret == -1
+    ));
+    int lo = 0;
+    int hi = size;
+    while (lo < hi) {
+        assert(
+            lo >= 0
+            && hi > lo
+            && hi <= size
+            && forall(k, range(0, lo), arr[k] < key)
+            && forall(k, range(hi, size), arr[k] > key)
+        );
+        int mid = (lo + hi) / 2;
+        if (key < arr[mid]) {
+            hi = mid;
+        } else if (arr[mid] < key) {
+            lo = mid + 1;
+        } else {
+            return mid;
+        }
+    }
+    return -1;
+}
+
 void merge(int arr1[], int arr2[], int res[], int size1, int size2) {
     requires(
         size1 > 0 && size2 > 0

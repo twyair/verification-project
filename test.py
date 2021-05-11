@@ -42,6 +42,7 @@ class VerifierTests(unittest.TestCase):
             "max2_float",
             "bubble_sort",
             "merge",
+            "binary_search",
         ]:
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check().is_ok())
