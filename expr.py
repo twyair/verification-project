@@ -9,30 +9,47 @@ import z3
 from cast import AstNode, AstType
 
 
-@enum.unique
-class Type(enum.Enum):
-    int = "int"
-    float = "float"
-    bool = "bool"
-    array_int = "array_int"
-    array_float = "array_float"
-    array_bool = "array_bool"
+@dataclass(frozen=True)
+class Type:
+    def as_z3(self):
+        raise NotImplementedError
+
+    def __str__(self) -> str:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class AtomicType(Type):
+    name: str  # "int", "float", "bool"
 
     def as_z3(self):
-        if self == Type.int:
+        if self.name == "int":
             return z3.IntSort()
-        elif self == Type.float:
+        elif self.name == "float":
             return z3.FloatDouble()
-        elif self == Type.bool:
+        elif self.name == "bool":
             return z3.BoolSort()
-        elif self == Type.array_int:
-            return z3.ArraySort(z3.IntSort(), z3.IntSort())
-        elif self == Type.array_bool:
-            return z3.ArraySort(z3.IntSort(), z3.BoolSort())
-        elif self == Type.array_float:
-            return z3.ArraySort(z3.IntSort(), z3.FloatDouble())
         else:
-            assert False, f"unknown type: {self}"
+            assert False
+
+    def __str__(self) -> str:
+        return self.name
+
+
+@dataclass(frozen=True)
+class ArrayType(Type):
+    element_type: Type
+
+    def as_z3(self):
+        return z3.ArraySort(z3.IntSort(), self.element_type.as_z3())
+
+    def __str__(self) -> str:
+        return f"{self.element_type}[]"
+
+
+INT = AtomicType("int")
+FLOAT = AtomicType("float")
+BOOL = AtomicType("bool")
 
 
 @dataclass(frozen=True)
@@ -129,7 +146,8 @@ class Expr:
                     var = args[0][0].text
                     domain = args[0][2]
                     if domain.type == AstType.IDENTIFIER:
-                        domain = Type(domain.text)
+                        assert domain.text is not None
+                        domain = AtomicType(domain.text)
                     else:
                         domain = (
                             Expr.from_ast(domain[2][0], env),
@@ -137,7 +155,7 @@ class Expr:
                         )
                     assert var is not None
                     env.open_scope()
-                    ty = domain if isinstance(domain, Type) else Type.int
+                    ty = domain if isinstance(domain, Type) else INT
                     env[var] = ty
                     # TODO: is there a better way to exclude quantified variables
                     del env.vars[env.rename(var)]
@@ -170,7 +188,6 @@ class Expr:
                             if_=Expr.from_ast(args[0], env),
                             then=Expr.from_ast(args[2], env),
                         )
-                    # TODO? add an optional `else_` to `Then`
                 else:
                     assert False, f"unknown function {ast[0].text}"
 
@@ -214,11 +231,12 @@ class Expr:
                 value_false=Expr.from_ast(ast[4], env),
             )
         elif ast.type == AstType.cast_expression:
-            ty = Type(ast[1].text)
+            assert ast[1].text is not None
+            ty = AtomicType(ast[1].text)
             expr = Expr.from_ast(ast[3], env)
-            if ty == Type.int:
+            if ty == INT:
                 return AsInt(expr)
-            elif ty == Type.float:
+            elif ty == FLOAT:
                 return AsReal(expr)
             else:
                 assert False, f"can't cast expr to type {ty}"
@@ -255,7 +273,7 @@ class RelExpr(Expr):
         return self.SYM2OPERATOR[self.operator](self.lhs.as_z3(), self.rhs.as_z3())
 
     def get_type(self) -> Type:
-        return Type.bool
+        return BOOL
 
 
 @dataclass(frozen=True)
@@ -275,7 +293,7 @@ class And(Expr):
         return z3.And(*(a.as_z3() for a in self.args))
 
     def get_type(self) -> Type:
-        return Type.bool
+        return BOOL
 
 
 @dataclass(frozen=True)
@@ -295,7 +313,7 @@ class Or(Expr):
         return z3.Or(*(a.as_z3() for a in self.args))
 
     def get_type(self) -> Type:
-        return Type.bool
+        return BOOL
 
 
 @dataclass(frozen=True)
@@ -312,7 +330,7 @@ class Not(Expr):
         return z3.Not(self.operand.as_z3())
 
     def get_type(self) -> Type:
-        return Type.bool
+        return BOOL
 
 
 @dataclass(frozen=True)
@@ -429,7 +447,7 @@ class AsInt(Expr):
         return z3.ToInt(self.expr.as_z3())
 
     def get_type(self) -> Type:
-        return Type.int
+        return INT
 
 
 @dataclass(frozen=True)
@@ -446,7 +464,7 @@ class AsReal(Expr):
         return z3.ToReal(self.expr.as_z3())
 
     def get_type(self) -> Type:
-        return Type.float
+        return FLOAT
 
 
 @dataclass(frozen=True)
@@ -463,7 +481,7 @@ class IntValue(Expr):
         return z3.IntVal(int(self.number))
 
     def get_type(self) -> Type:
-        return Type.int
+        return INT
 
 
 @dataclass(frozen=True)
@@ -480,7 +498,7 @@ class RealValue(Expr):
         return z3.FPVal(self.number)
 
     def get_type(self) -> Type:
-        return Type.float
+        return FLOAT
 
 
 @dataclass(frozen=True)
@@ -497,7 +515,7 @@ class BoolValue(Expr):
         return z3.BoolVal(self.value)
 
     def get_type(self) -> Type:
-        return Type.bool
+        return BOOL
 
 
 @dataclass(frozen=True)
@@ -522,7 +540,7 @@ class IfThenElse(Expr):
         )
 
     def get_type(self) -> Type:
-        return Type.bool
+        return BOOL
 
 
 @dataclass(frozen=True)
@@ -545,15 +563,7 @@ class ArrayStore(Expr):
         return z3.Store(self.array.as_z3(), self.index.as_z3(), self.value.as_z3())
 
     def get_type(self) -> Type:
-        ty = self.array.get_type()
-        if ty == Type.array_int:
-            return Type.int
-        elif ty == Type.array_float:
-            return Type.float
-        elif ty == Type.array_bool:
-            return Type.bool
-        else:
-            assert False
+        return self.array.get_type()
 
 
 @dataclass(frozen=True)
@@ -572,14 +582,8 @@ class ArraySelect(Expr):
 
     def get_type(self) -> Type:
         ty = self.array.get_type()
-        if ty == Type.array_int:
-            return Type.int
-        elif ty == Type.array_float:
-            return Type.float
-        elif ty == Type.array_bool:
-            return Type.bool
-        else:
-            assert False
+        assert isinstance(ty, ArrayType)
+        return ty.element_type
 
 
 @dataclass(frozen=True)
@@ -620,7 +624,7 @@ class ForAll(Prop):
     def __str__(self) -> str:
         return (
             "∀"
-            + ",".join(f"{var.var}∈{var.type_.value}" for var in self.vars)
+            + ",".join(f"{var.var}∈{var.type_}" for var in self.vars)
             + f".{self.prop}"
         )
 
@@ -675,7 +679,7 @@ class Exists(Prop):
 
     def __str__(self) -> str:
         domain = (
-            self.domain.value
+            str(self.domain)
             if isinstance(self.domain, Type)
             else "({},{})".format(*self.domain)
         )

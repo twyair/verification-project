@@ -23,6 +23,8 @@ from cfg import (
 )
 from expr import (
     And,
+    ArrayType,
+    AtomicType,
     Environment,
     ForAll,
     Expr,
@@ -93,13 +95,14 @@ class Function:
         assert ret_type is not None
         env = Environment.empty()
         if ret_type != "void":
-            env["ret"] = Type(ret_type)
+            env["ret"] = AtomicType(ret_type)
         params = declarator[2]
         if params.type == AstType.parameter_list:
             for p in params.children:
                 if p.type == AstType.parameter_declaration:
                     ty = p[0].text
                     assert ty is not None and ty in ("int", "float", "bool",)
+                    ty = AtomicType(ty)
                     name = None
                     if p[1].type == AstType.IDENTIFIER:
                         name = p[1].text
@@ -109,9 +112,11 @@ class Function:
                         and p[1][1].text == "["
                     ):
                         name = p[1][0].text
-                        ty = "array_" + ty
+                        ty = ArrayType(ty)
+                    else:
+                        assert False
                     assert name is not None
-                    env[name] = Type(ty)
+                    env[name] = ty
         params = env.get_vars()
 
         requires = None

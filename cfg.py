@@ -8,6 +8,8 @@ from cast import AstNode, AstType
 from expr import (
     ArraySelect,
     And,
+    ArrayType,
+    AtomicType,
     BinaryExpr,
     BoolValue,
     ArrayStore,
@@ -369,10 +371,10 @@ class StatementEnvironment:
             ):
                 var = ast[1][0].text
                 assert var is not None
-                self.env[var] = Type("array_" + type_)
+                self.env[var] = ArrayType(AtomicType(type_))
                 return self.next_node
 
-            type_ = Type(type_)
+            type_ = AtomicType(type_)
             if ast[1].type == AstType.IDENTIFIER:
                 var = ast[1].text
                 assert var is not None
