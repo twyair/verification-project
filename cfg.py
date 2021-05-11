@@ -391,13 +391,12 @@ class StatementEnvironment:
                 next_node=self.next_node,
             )
         elif ast.type == AstType.expression_statement:
-            # TODO: handle ++i, --i, i++, i--
-            if ast[0].type == AstType.postfix_expression:
+            if (
+                ast[0].type == AstType.postfix_expression
+                and ast[0][1].type == AstType.paren_left
+                and ast[0][0].type == AstType.IDENTIFIER
+            ):
                 fn = ast[0][0].text
-                assert (
-                    ast[0][1].type == AstType.paren_left
-                    and ast[0][0].type == AstType.IDENTIFIER
-                )
                 if fn == "assert":
                     assertion = Expr.from_ast(ast[0][2], self.env)
                     remembers = tuple(chain.from_iterable(self.remembers))
@@ -430,14 +429,28 @@ class StatementEnvironment:
                 else:
                     assert False, f"unknown function {fn}"
 
-            if ast[0].type != AstType.assignment_expression:
+            if ast[0].type == AstType.postfix_expression and ast[0][1].type in (
+                AstType.INC_OP,
+                AstType.DEC_OP,
+            ):
+                left = Expr.from_ast(ast[0][0], self.env)
+                operator = "+=" if ast[0][1].type == AstType.INC_OP else "-="
+                value = IntValue(1)
+            elif ast[0].type == AstType.unary_expression and ast[0][0].type in (
+                AstType.INC_OP,
+                AstType.DEC_OP,
+            ):
+                left = Expr.from_ast(ast[0][1], self.env)
+                operator = "+=" if ast[0][0].type == AstType.INC_OP else "-="
+                value = IntValue(1)
+            elif ast[0].type != AstType.assignment_expression:
                 # FIXME
                 return self.next_node
-
-            value = Expr.from_ast(ast[0][2], self.env)
-            operator = ast[0][1].text
-            assert operator is not None
-            left = Expr.from_ast(ast[0][0], self.env)
+            else:
+                value = Expr.from_ast(ast[0][2], self.env)
+                operator = ast[0][1].text
+                assert operator is not None
+                left = Expr.from_ast(ast[0][0], self.env)
 
             # TODO? handle chained assignments?
 

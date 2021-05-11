@@ -16,7 +16,7 @@ int first_true(bool arr[], int size) {
         forall(k, range(0, size), then(arr[k] && forall(t, range(0, k), !arr[t]), ret == k))
         && then(forall(k, range(0, size), !arr[k]), ret == size)
     );
-    for (int i = 0; i < size; i += 1) {
+    for (int i = 0; i < size; i++) {
         if (arr[i]) {
             return i;
         }
@@ -37,7 +37,7 @@ int flip_even(bool arr[], int size) {
             )
         )
     );
-    for (int i = 0; i < size; i += 1) {
+    for (int i = 0; i < size; i++) {
         if (i % 2 == 0) {
             arr[i] = !arr[i];
         }
@@ -57,7 +57,7 @@ int array_max(int arr[], int size) {
         && forall(k, range(0, size), arr[k] <= ret)
     );
     int max = arr[0];
-    for (int i = 0; i != size; i += 1) {
+    for (int i = 0; i != size; i++) {
         if (arr[i] >= max) {
             max = arr[i];
         }
@@ -95,7 +95,7 @@ void array_reverse(int arr[], int size) {
     requires(size > 0);
     freeze(ARR, arr);
     ensures(forall(k, range(0, size), ARR[k] == arr[size - 1 - k]));
-    for (int i = 0; i < size / 2; i += 1) {
+    for (int i = 0; i < size / 2; i++) {
         int tmp = arr[i];
         arr[i] = arr[size - 1 - i];
         arr[size - 1 - i] = tmp;
@@ -110,7 +110,7 @@ void array_reverse(int arr[], int size) {
 
 void vector_add(int v[], int u[], int res[], int size) {
     requires(size > 0);
-    for (int i = 0; i < size; i += 1) {
+    for (int i = 0; i < size; i++) {
         res[i] = v[i] + u[i];
         assert(forall(k, range(0, i + 1), res[k] == v[k] + u[k]));
     }
@@ -121,7 +121,7 @@ bool is_prime(int num) {
     requires(num > 1);
     remember(num > 1);
     ensures(forall(k, range(2, num), num % k != 0) == ret);
-    for (int i = 2; i != num; i += 1) {
+    for (int i = 2; i != num; i++) {
         if (num % i == 0) {
             return false;
         }
@@ -134,7 +134,7 @@ int sqrt_v1(int num) {
     requires(num > 0);
     // FIXME? doesnt work with `, ret == -1)`
     ensures(then(exists(k, range(1, num), k * k == num), ret * ret == num));
-    for (int i = 1; i < num; i += 1) {
+    for (int i = 1; i < num; i++) {
         if (i * i == num) {
             return i;
         }
@@ -149,7 +149,7 @@ int sqrt_v2(int num) {
     int i = 1;
     while (i * i <= num) {
         assert(i >= 1 && i <= num && forall(k, range(0, i + 1), k * k <= num));
-        i += 1;
+        i++;
     }
     return i - 1;
 }
@@ -166,7 +166,7 @@ int partition(int arr[], int size, int sep) {
 
     int first = 0;
     remember(size > 0 && first >= 0);
-    for (; first < size && arr[first] < sep; first += 1) {
+    for (; first < size && arr[first] < sep; first++) {
         assert(
             first < size
             && forall(k, range(0, first + 1), arr[k] < sep)
@@ -177,7 +177,7 @@ int partition(int arr[], int size, int sep) {
         return size;
     }
 
-    for (int i = first + 1; i < size; i += 1) {
+    for (int i = first + 1; i < size; i++) {
         assert(
             i > first
             && i < size
@@ -189,7 +189,7 @@ int partition(int arr[], int size, int sep) {
             int tmp = arr[i];
             arr[i] = arr[first];
             arr[first] = tmp;
-            first += 1;
+            first++;
         }
 
     }
@@ -203,10 +203,10 @@ int mccarthy_91(int n) {
     while (c != 0) {
         if (n > 100) {
             n -= 10;
-            c -= 1;
+            c--;
         } else {
             n += 11;
-            c += 1;
+            c++;
         }
         assert(
             then(
@@ -263,11 +263,11 @@ void merge(int arr1[], int arr2[], int res[], int size1, int size2) {
         if (j >= size2 || i < size1 && arr1[i] < arr2[j]) {
             res[i + j] = arr1[i];
             phantom(perm1[i] = i + j);
-            i += 1;
+            i++;
         } else {
             res[i + j] = arr2[j];
             phantom(perm2[j] = i + j);
-            j += 1;
+            j++;
         }
     }
 }
@@ -275,8 +275,8 @@ void merge(int arr1[], int arr2[], int res[], int size1, int size2) {
 void bubble_sort(int arr[], int size) {
     requires(size > 0);
     ensures(forall(k, range(0, size - 1), arr[k] <= arr[k + 1]));
-    for (int j = 0; j < size; j += 1) {
-        for (int i = 0; i != size - j - 1; i += 1) {
+    for (int j = 0; j < size; j++) {
+        for (int i = 0; i != size - j - 1; i++) {
             if (arr[i] > arr[i + 1]) {
                 int tmp = arr[i + 1];
                 arr[i + 1] = arr[i];
@@ -314,7 +314,7 @@ void insertion_sort(int arr[], int size) {
         && forall(k, range(0, size), perm_rev[k] < size && perm_rev[k] >= 0 && arr[perm_rev[k]] == ARR[k])
         && forall(k, range(0, size), perm[perm_rev[k]] == k)
     );
-    for (int i = 1; i < size; i += 1) {
+    for (int i = 1; i < size; ++i) {
         int curr = arr[i];
         int j = 0;
         remember(
@@ -330,7 +330,7 @@ void insertion_sort(int arr[], int size) {
                 && forall(k, range(0, size), perm_rev[k] < size && perm_rev[k] >= 0 && arr[perm_rev[k]] == ARR[k])
                 && forall(k, range(0, size), perm[perm_rev[k]] == k)
             );
-            j += 1;
+            j++;
         }
 
         phantom(int p = perm[i]);

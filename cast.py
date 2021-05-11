@@ -45,6 +45,8 @@ class AstType(enum.Enum):
     FLOAT = "FLOAT"
     BOOL = "BOOL"
     VOID = "VOID"
+    INC_OP = "INC_OP"
+    DEC_OP = "DEC_OP"
     NE_OP = "NE_OP"
     GE_OP = "GE_OP"
     RIGHT_OP = "RIGHT_OP"
