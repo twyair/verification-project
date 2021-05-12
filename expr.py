@@ -393,8 +393,14 @@ class BinaryExpr(Expr):
                     else f"{self.rhs}"
                 )
             )
-        elif self.operator in "+-":
+        elif self.operator == "+":
             return f"{self.lhs} {self.operator} {self.rhs}"
+        elif self.operator == "-":
+            return f"{self.lhs} {self.operator} " + (
+                f"({self.rhs})"
+                if isinstance(self.rhs, BinaryExpr) and self.rhs.operator == "+"
+                else f"{self.rhs}"
+            )
         else:
             assert False
 
