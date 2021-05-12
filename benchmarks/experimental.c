@@ -38,12 +38,16 @@ int sqrt_v3(int num) {
             && num >= 0
             && NUM > 1
             && bit > 0
-            && num * 4 * bit == NUM * 4 * bit - res * res
             && pow4[pow4_index] == bit
+            && then(bit > 1, bit / 4 * 4 == bit)
             && forall(i, range(1, pow4_index + 1), pow4[i] == 4 * pow4[i - 1])
             && pow4[0] == 1
             && pow4_index >= 0
+            && NUM * 4 * bit - num * 4 * bit == res * res
+            && num < 2 * res + bit * 4
         );
+        // FIXME: prove that `res % 2 == 0`
+        assume(res % 2 == 0);
         if (num >= res + bit) {
             num -= res + bit;
             res = res / 2 + bit;
