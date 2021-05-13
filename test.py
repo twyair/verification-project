@@ -27,10 +27,10 @@ class VerifierTests(unittest.TestCase):
     def test_random(self):
         fns = main.get_functions("random")
         for f in [
-            "is_prime",
             "array_reverse",
             "vector_add",
             "sqrt_v1",
+            "is_prime",
             "partition",
             "mccarthy_91",
             "de_morgan",
@@ -51,7 +51,7 @@ class VerifierTests(unittest.TestCase):
 
     def test_iterative_check(self):
         fns = main.get_functions("random")
-        for f in ["insertion_sort", "sqrt_v2", "sqrt_v3"]:
+        for f in ["insertion_sort", "sqrt_v2", "sqrt_v3", "additive_factorial"]:
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check_iter().is_ok())
 

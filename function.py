@@ -302,7 +302,7 @@ class Function:
                     id_,
                     color="pink",
                     label="assume",
-                    shape="circle",
+                    shape="oval",
                     content=f"{node.expression}",
                 )
                 graph.add_edge(id_, get_id(node.next_node))
