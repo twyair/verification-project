@@ -1,6 +1,7 @@
+from __future__ import annotations
 import enum
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 @enum.unique
@@ -112,13 +113,13 @@ class AstNode:
     text: Optional[str]
     type: AstType
     range: AstRange
-    children: List["AstNode"]
+    children: list[AstNode]
 
-    def __getitem__(self, index: int) -> "AstNode":
+    def __getitem__(self, index: int) -> AstNode:
         return self.children[index]
 
 
-def parse(ast: Dict[str, Any]) -> AstNode:
+def parse(ast: dict[str, Any]) -> AstNode:
     return AstNode(
         text=ast.get("text", None),
         type=AstType(ast["type"]),

@@ -1,8 +1,8 @@
-import enum
+from __future__ import annotations
 import operator
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any, Callable, ClassVar, DefaultDict, Dict, List, Tuple, Union
+from typing import Any, Callable, ClassVar
 
 import z3
 
@@ -54,10 +54,10 @@ BOOL = AtomicType("bool")
 
 @dataclass(frozen=True)
 class Environment:
-    scopes: List[Dict[str, Type]]
-    vars: Dict[str, Type]
-    names_count: DefaultDict[str, int]
-    renamer: List[Dict[str, str]]
+    scopes: list[dict[str, Type]]
+    vars: dict[str, Type]
+    names_count: defaultdict[str, int]
+    renamer: list[dict[str, str]]
 
     @staticmethod
     def empty():
@@ -98,13 +98,13 @@ class Environment:
         self.scopes.pop()
         self.renamer.pop()
 
-    def get_vars(self) -> Dict[str, Type]:
+    def get_vars(self) -> dict[str, Type]:
         return self.vars.copy()
 
 
 @dataclass(frozen=True)
 class Expr:
-    def assign(self, vars: Dict[str, "Expr"]) -> "Expr":
+    def assign(self, vars: dict[str, Expr]) -> Expr:
         raise NotImplementedError
 
     def __str__(self) -> str:
@@ -117,7 +117,7 @@ class Expr:
         raise NotImplementedError
 
     @staticmethod
-    def from_ast(ast: AstNode, env: Environment) -> "Expr":
+    def from_ast(ast: AstNode, env: Environment) -> Expr:
         if ast.type in (AstType.relational_expression, AstType.equality_expression):
             lhs, op, rhs = ast.children
             assert op.text is not None
@@ -250,7 +250,7 @@ class RelExpr(Expr):
     lhs: Expr
     rhs: Expr
 
-    SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any, Any], Any]]] = {
+    SYM2OPERATOR: ClassVar[dict[str, Callable[[Any, Any], Any]]] = {
         "==": operator.eq,
         "!=": operator.ne,
         "<": operator.lt,
@@ -258,9 +258,9 @@ class RelExpr(Expr):
         ">": operator.gt,
         ">=": operator.ge,
     }
-    SYM2PRETTY: ClassVar[Dict[str, str]] = {"<=": "≤", ">=": "≥", "==": "=", "!=": "≠"}
+    SYM2PRETTY: ClassVar[dict[str, str]] = {"<=": "≤", ">=": "≥", "==": "=", "!=": "≠"}
 
-    def assign(self, vars: Dict[str, Expr]) -> "RelExpr":
+    def assign(self, vars: dict[str, Expr]) -> RelExpr:
         return RelExpr(
             operator=self.operator, lhs=self.lhs.assign(vars), rhs=self.rhs.assign(vars)
         )
@@ -278,9 +278,9 @@ class RelExpr(Expr):
 
 @dataclass(frozen=True)
 class And(Expr):
-    args: Tuple[Expr, ...]
+    args: tuple[Expr, ...]
 
-    def assign(self, vars: Dict[str, Expr]) -> "And":
+    def assign(self, vars: dict[str, Expr]) -> And:
         return And(args=tuple(a.assign(vars) for a in self.args))
 
     def __str__(self) -> str:
@@ -298,9 +298,9 @@ class And(Expr):
 
 @dataclass(frozen=True)
 class Or(Expr):
-    args: Tuple[Expr, ...]
+    args: tuple[Expr, ...]
 
-    def assign(self, vars: Dict[str, Expr]) -> "Or":
+    def assign(self, vars: dict[str, Expr]) -> Or:
         return Or(tuple(a.assign(vars) for a in self.args))
 
     def __str__(self) -> str:
@@ -320,7 +320,7 @@ class Or(Expr):
 class Not(Expr):
     operand: Expr
 
-    def assign(self, vars: Dict[str, Expr]) -> "Not":
+    def assign(self, vars: dict[str, Expr]) -> Not:
         return Not(operand=self.operand.assign(vars))
 
     def __str__(self) -> str:
@@ -338,7 +338,7 @@ class Variable(Expr):
     var: str
     type_: Type
 
-    def assign(self, vars: Dict[str, Expr]) -> Expr:
+    def assign(self, vars: dict[str, Expr]) -> Expr:
         return vars.get(self.var, self)
 
     def __str__(self) -> str:
@@ -357,7 +357,7 @@ class BinaryExpr(Expr):
     lhs: Expr
     rhs: Expr
 
-    SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any, Any], Any]]] = {
+    SYM2OPERATOR: ClassVar[dict[str, Callable[[Any, Any], Any]]] = {
         "+": operator.add,
         "-": operator.sub,
         "/": operator.truediv,  # NOTE: truediv for z3 integer expressions performs integer division (floordiv isn't defined)
@@ -370,7 +370,7 @@ class BinaryExpr(Expr):
         # "<<": operator.lshift,
     }
 
-    def assign(self, vars: Dict[str, Expr]) -> "BinaryExpr":
+    def assign(self, vars: dict[str, Expr]) -> BinaryExpr:
         return BinaryExpr(
             operator=self.operator, rhs=self.rhs.assign(vars), lhs=self.lhs.assign(vars)
         )
@@ -416,13 +416,13 @@ class UnaryExpr(Expr):
     operator: str  # + - ~
     operand: Expr
 
-    SYM2OPERATOR: ClassVar[Dict[str, Callable[[Any], Any]]] = {
+    SYM2OPERATOR: ClassVar[dict[str, Callable[[Any], Any]]] = {
         "+": operator.pos,
         "-": operator.neg,
         # "~": operator.inv,
     }
 
-    def assign(self, vars: Dict[str, Expr]) -> "UnaryExpr":
+    def assign(self, vars: dict[str, Expr]) -> UnaryExpr:
         return UnaryExpr(operator=self.operator, operand=self.operand.assign(vars))
 
     def __str__(self) -> str:
@@ -443,7 +443,7 @@ class UnaryExpr(Expr):
 class AsInt(Expr):
     expr: Expr
 
-    def assign(self, vars: Dict[str, Expr]) -> "AsInt":
+    def assign(self, vars: dict[str, Expr]) -> AsInt:
         return AsInt(self.expr.assign(vars))
 
     def __str__(self) -> str:
@@ -460,7 +460,7 @@ class AsInt(Expr):
 class AsReal(Expr):
     expr: Expr
 
-    def assign(self, vars: Dict[str, Expr]) -> "AsReal":
+    def assign(self, vars: dict[str, Expr]) -> AsReal:
         return AsReal(self.expr.assign(vars))
 
     def __str__(self) -> str:
@@ -477,7 +477,7 @@ class AsReal(Expr):
 class IntValue(Expr):
     number: int
 
-    def assign(self, vars: Dict[str, Expr]) -> "IntValue":
+    def assign(self, vars: dict[str, Expr]) -> IntValue:
         return self
 
     def __str__(self) -> str:
@@ -494,7 +494,7 @@ class IntValue(Expr):
 class RealValue(Expr):
     number: float
 
-    def assign(self, vars: Dict[str, Expr]) -> "RealValue":
+    def assign(self, vars: dict[str, Expr]) -> RealValue:
         return self
 
     def __str__(self) -> str:
@@ -511,7 +511,7 @@ class RealValue(Expr):
 class BoolValue(Expr):
     value: bool
 
-    def assign(self, vars: Dict[str, Expr]) -> "BoolValue":
+    def assign(self, vars: dict[str, Expr]) -> BoolValue:
         return self
 
     def __str__(self) -> str:
@@ -530,7 +530,7 @@ class IfThenElse(Expr):
     value_true: Expr
     value_false: Expr
 
-    def assign(self, vars: Dict[str, Expr]) -> "IfThenElse":
+    def assign(self, vars: dict[str, Expr]) -> IfThenElse:
         return IfThenElse(
             condition=self.condition.assign(vars),
             value_true=self.value_true.assign(vars),
@@ -555,7 +555,7 @@ class ArrayStore(Expr):
     index: Expr
     value: Expr
 
-    def assign(self, vars: Dict[str, Expr]) -> "ArrayStore":
+    def assign(self, vars: dict[str, Expr]) -> ArrayStore:
         return ArrayStore(
             array=self.array.assign(vars),
             index=self.index.assign(vars),
@@ -577,7 +577,7 @@ class ArraySelect(Expr):
     array: Expr
     index: Expr
 
-    def assign(self, vars: Dict[str, Expr]) -> "ArraySelect":
+    def assign(self, vars: dict[str, Expr]) -> ArraySelect:
         return ArraySelect(array=self.array.assign(vars), index=self.index.assign(vars))
 
     def __str__(self) -> str:
@@ -602,7 +602,7 @@ class Then(Prop):
     if_: Expr
     then: Expr
 
-    def assign(self, vars: Dict[str, Expr]) -> Prop:
+    def assign(self, vars: dict[str, Expr]) -> Then:
         return Then(if_=self.if_.assign(vars), then=self.then.assign(vars))
 
     def __str__(self) -> str:
@@ -619,10 +619,10 @@ class Then(Prop):
 
 @dataclass(frozen=True)
 class ForAll(Prop):
-    vars: List[Variable]
+    vars: list[Variable]
     prop: Expr
 
-    def assign(self, vars: Dict[str, Expr]) -> Prop:
+    def assign(self, vars: dict[str, Expr]) -> ForAll:
         for var in self.vars:
             assert var.var not in vars
         return ForAll(vars=self.vars, prop=self.prop.assign(vars))
@@ -641,10 +641,10 @@ class ForAll(Prop):
 @dataclass(frozen=True)
 class ForAllRange(Prop):
     var: Variable
-    range: Tuple[Expr, Expr]
+    range: tuple[Expr, Expr]
     prop: Expr
 
-    def assign(self, vars: Dict[str, Expr]) -> "ForAllRange":
+    def assign(self, vars: dict[str, Expr]) -> ForAllRange:
         if self.var in vars:
             vars = vars.copy()
             del vars[self.var.var]
@@ -671,10 +671,10 @@ class ForAllRange(Prop):
 @dataclass(frozen=True)
 class Exists(Prop):
     var: Variable
-    domain: Union[Tuple[Expr, Expr], Type]
+    domain: tuple[Expr, Expr] | Type
     prop: Expr
 
-    def assign(self, vars: Dict[str, Expr]) -> Prop:
+    def assign(self, vars: dict[str, Expr]) -> Exists:
         if self.var in vars:
             vars = vars.copy()
             del vars[self.var.var]
@@ -708,10 +708,10 @@ class Exists(Prop):
 @dataclass(frozen=True)
 class Predicate(Prop):
     name: str
-    arguments: List[Expr]
-    sorts: List
+    arguments: list[Expr]
+    sorts: list
 
-    def assign(self, vars: Dict[str, Expr]) -> Prop:
+    def assign(self, vars: dict[str, Expr]) -> Predicate:
         return Predicate(
             name=self.name,
             arguments=[a.assign(vars) for a in self.arguments],

@@ -1,7 +1,7 @@
+from __future__ import annotations
 from dataclasses import dataclass
-from functools import reduce
 import itertools
-from typing import Dict, Iterator, List, Optional, Set, Tuple, cast
+from typing import Iterator, Optional, cast
 
 import z3
 from pygraphviz.agraph import AGraph
@@ -29,8 +29,6 @@ from expr import (
     ForAll,
     Expr,
     Predicate,
-    Prop,
-    Type,
     Variable,
 )
 
@@ -80,11 +78,11 @@ class Function:
     name: str
     cfg: CfgNode
     horn: bool
-    params: List[Variable]
-    vars: List[Variable]
+    params: list[Variable]
+    vars: list[Variable]
 
     @staticmethod
-    def from_ast(ast: AstNode, horn: bool = False) -> "Function":
+    def from_ast(ast: AstNode, horn: bool = False) -> Function:
         declarator = next(
             c for c in ast.children if c.type == AstType.direct_declarator
         )
@@ -153,7 +151,7 @@ class Function:
         else:
             return rule
 
-    def get_proof_rule_horn(self) -> List[Expr]:
+    def get_proof_rule_horn(self) -> list[Expr]:
         assert self.horn
         vars = self.vars + self.params
         return [
@@ -319,9 +317,9 @@ class Function:
         graph.draw(path=filepath, prog="dot")
 
     @staticmethod
-    def set_cutpoints(cfg: CfgNode, vars: List[Variable]):
+    def set_cutpoints(cfg: CfgNode, vars: list[Variable]):
         graph = nx.DiGraph()
-        id2node: Dict[int, CfgNode] = {}
+        id2node: dict[int, CfgNode] = {}
 
         def get_id(node: CfgNode) -> int:
             return id(node)
@@ -351,14 +349,14 @@ class Function:
         traverse(cfg)
 
         cycles = list(nx.simple_cycles(graph))
-        node2cycle: Dict[int, Set[int]] = {
+        node2cycle: dict[int, set[int]] = {
             n: set() for n in set(itertools.chain.from_iterable(cycles))
         }
         for i, c in enumerate(cycles):
             for n in c:
                 node2cycle[n] |= {i}
 
-        cutpoints: List[int] = []
+        cutpoints: list[int] = []
         while node2cycle:
             point = max(node2cycle, key=lambda n: len(node2cycle[n]))
             cutpoints.append(point)
@@ -379,7 +377,7 @@ class Function:
 
             new_node = CutpointNode(
                 Predicate(
-                    name=f"P{index}", arguments=cast(List[Expr], vars), sorts=sorts,
+                    name=f"P{index}", arguments=cast("list[Expr]", vars), sorts=sorts,
                 ),
                 node_cp,
             )

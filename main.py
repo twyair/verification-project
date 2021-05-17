@@ -1,6 +1,6 @@
+from __future__ import annotations
 import json
 import os
-from typing import Dict
 
 from cast import parse, AstType
 from function import Function
@@ -9,7 +9,7 @@ from function import Function
 PATH = "benchmarks/{}.json"
 
 
-def get_functions(filename: str, horn: bool = False) -> Dict[str, "Function"]:
+def get_functions(filename: str, horn: bool = False) -> dict[str, Function]:
     err = os.system(f'./comp-benchmark.sh "{filename}"')
     if err != 0:
         raise Exception(f"error code: {err}")

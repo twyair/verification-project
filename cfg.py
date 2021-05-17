@@ -1,6 +1,6 @@
-from functools import reduce
+from __future__ import annotations
 from itertools import chain
-from typing import Dict, Iterator, List, Optional, Set, Tuple, cast
+from typing import Iterator, Optional, cast
 from dataclasses import dataclass
 import dataclasses
 
@@ -17,9 +17,7 @@ from expr import (
     Expr,
     IntValue,
     RelExpr,
-    Type,
     Variable,
-    Prop,
     Then,
     Not,
     Predicate,
@@ -28,16 +26,16 @@ from expr import (
 
 @dataclass(frozen=True)
 class BasicPath:
-    reachability: List[Expr]
-    transformation: Dict[str, Expr]
+    reachability: list[Expr]
+    transformation: dict[str, Expr]
     assertion_start: Optional[Expr]
     assertion_end: Optional[Expr]
 
     @staticmethod
-    def empty() -> "BasicPath":
+    def empty() -> BasicPath:
         return BasicPath([], {}, None, None)
 
-    def copy(self) -> "BasicPath":
+    def copy(self) -> BasicPath:
         return BasicPath(
             self.reachability.copy(),
             self.transformation.copy(),
@@ -45,20 +43,20 @@ class BasicPath:
             self.assertion_end,
         )
 
-    def condition(self, cond: Expr) -> "BasicPath":
+    def condition(self, cond: Expr) -> BasicPath:
         cp = self.copy()
         cp.reachability.append(cond.assign(self.transformation))
         return cp
 
-    def transform(self, var: str, expr: Expr) -> "BasicPath":
+    def transform(self, var: str, expr: Expr) -> BasicPath:
         cp = self.copy()
         cp.transformation[var] = expr.assign(self.transformation)
         return cp
 
-    def assert_start(self, prop: Expr) -> "BasicPath":
+    def assert_start(self, prop: Expr) -> BasicPath:
         return dataclasses.replace(self, assertion_start=prop)
 
-    def assert_end(self, prop: Expr) -> "BasicPath":
+    def assert_end(self, prop: Expr) -> BasicPath:
         return dataclasses.replace(self, assertion_end=prop.assign(self.transformation))
 
     def get_proof_rule(self) -> Expr:
@@ -85,11 +83,11 @@ class BasicPath:
 @dataclass
 class CfgNode:
     def generate_paths(
-        self, path: BasicPath, visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         raise NotImplementedError
 
-    def replace(self, dummy: "DummyNode", node: "CfgNode", visited: Set[int]):
+    def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
         raise NotImplementedError
 
 
@@ -101,7 +99,7 @@ class DummyNode(CfgNode):
     """
 
     def replace(
-        self, dummy: "DummyNode", node: "CfgNode", visited: Set[int],
+        self, dummy: DummyNode, node: CfgNode, visited: set[int],
     ):
         return
 
@@ -112,14 +110,14 @@ class StartNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         yield from self.next_node.generate_paths(
             path if self.requires is None else path.assert_start(self.requires),
             visited_asserts,
         )
 
-    def replace(self, dummy: DummyNode, node: CfgNode, visited: Set[int]):
+    def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
         if id(self) in visited:
             return self
         if dummy is self.next_node:
@@ -132,13 +130,13 @@ class EndNode(CfgNode):
     assertion: Optional[Expr]
 
     def generate_paths(
-        self, path: BasicPath, visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         if self.assertion is not None and id(self) not in visited_asserts:
             visited_asserts.add(id(self))
             yield path.assert_end(self.assertion)
 
-    def replace(self, dummy: DummyNode, node: CfgNode, visited: Set[int]):
+    def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
         pass
 
 
@@ -149,7 +147,7 @@ class CondNode(CfgNode):
     false_br: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         condition = self.condition
         yield from self.true_br.generate_paths(
@@ -159,7 +157,7 @@ class CondNode(CfgNode):
             path.condition(Not(condition)), visited_asserts
         )
 
-    def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
+    def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
         if id(self) in visited:
             return self
         if dummy is self.true_br:
@@ -177,13 +175,13 @@ class AssignmentNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         yield from self.next_node.generate_paths(
             path.transform(self.var.var, self.expression), visited_asserts
         )
 
-    def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
+    def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
         if id(self) in visited:
             return self
         if dummy is self.next_node:
@@ -197,13 +195,13 @@ class AssumeNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         yield from self.next_node.generate_paths(
             path.condition(self.expression), visited_asserts
         )
 
-    def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
+    def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
         if id(self) in visited:
             return self
         if dummy is self.next_node:
@@ -217,7 +215,7 @@ class AssertNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         yield path.assert_end(self.assertion)
         if id(self) in visited_asserts:
@@ -227,7 +225,7 @@ class AssertNode(CfgNode):
             BasicPath.empty().assert_start(self.assertion), visited_asserts,
         )
 
-    def replace(self, dummy: DummyNode, node: "CfgNode", visited: Set[int]):
+    def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
         if id(self) in visited:
             return self
         if dummy is self.next_node:
@@ -241,7 +239,7 @@ class CutpointNode(CfgNode):
     next_node: CfgNode
 
     def generate_paths(
-        self, path: BasicPath, visited_asserts: Set[int],
+        self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         yield path.assert_end(self.predicate)
         if id(self) in visited_asserts:
@@ -259,26 +257,17 @@ class StatementEnvironment:
     loop_start: Optional[CfgNode]
     loop_end: Optional[CfgNode]
     env: Environment
-    remembers: List[List[Expr]]
-    labels: List[Tuple[Optional[Expr], CfgNode]]
+    remembers: list[list[Expr]]
+    labels: list[tuple[Optional[Expr], CfgNode]]
 
-    def replace(
-        self,
-        *,
-        next_node: Optional[CfgNode] = None,
-        loop_start: Optional[CfgNode] = None,
-        loop_end: Optional[CfgNode] = None,
-        labels: Optional[List[Tuple[Optional[Expr], CfgNode]]] = None,
-    ) -> "StatementEnvironment":
-        return StatementEnvironment(
-            next_node=self.next_node if next_node is None else next_node,
-            loop_start=self.loop_start if loop_start is None else loop_start,
-            loop_end=self.loop_end if loop_end is None else loop_end,
-            labels=self.labels if labels is None else labels,
-            end_node=self.end_node,
-            env=self.env,
-            remembers=self.remembers,
-        )
+    def with_next(self, next_node: CfgNode) -> StatementEnvironment:
+        return dataclasses.replace(self, next_node=next_node)
+
+    def enter_loop(self, *, start: CfgNode, end: CfgNode) -> StatementEnvironment:
+        return dataclasses.replace(self, loop_start=start, loop_end=end)
+
+    def enter_switch(self, end: CfgNode) -> StatementEnvironment:
+        return dataclasses.replace(self, loop_end=end, labels=[])
 
     def create_cfg(self, ast: AstNode) -> CfgNode:
         if ast.type == AstType.labeled_statement:
@@ -305,9 +294,9 @@ class StatementEnvironment:
                 )
             elif ast[0].type == AstType.SWITCH:
                 switch_value = Expr.from_ast(ast[2], self.env)
-                statement_env = self.replace(loop_end=self.next_node, labels=[])
+                statement_env = self.enter_switch(self.next_node)
                 statement = statement_env.create_cfg(ast[4])
-                conds: List[CondNode] = []
+                conds: list[CondNode] = []
                 default = self.next_node
                 for case_value, statement in statement_env.labels:
                     if case_value is None:
@@ -320,7 +309,7 @@ class StatementEnvironment:
                         )
                     )
                 for cond, next_ in zip(
-                    conds, cast(List[CfgNode], conds[1:]) + [default]
+                    conds, cast("list[CfgNode]", conds[1:]) + [default]
                 ):
                     cond.false_br = next_
                 return conds[0] if conds else default
@@ -328,11 +317,11 @@ class StatementEnvironment:
                 assert False
         elif ast.type == AstType.compound_statement:
             self.open_scope()
-            statements: List[CfgNode] = []
-            dummies: List[DummyNode] = []
+            statements: list[CfgNode] = []
+            dummies: list[DummyNode] = []
             for s in ast[1].children:
                 dummy = DummyNode()
-                statement = self.replace(next_node=dummy).create_cfg(s)
+                statement = self.with_next(dummy).create_cfg(s)
                 if statement is not dummy:
                     dummies.append(dummy)
                     statements.append(statement)
@@ -481,9 +470,11 @@ class StatementEnvironment:
                 while_node = CondNode(
                     Expr.from_ast(ast[2], self.env), DummyNode(), self.next_node
                 )
-                while_node.true_br = self.replace(
-                    next_node=while_node, loop_start=while_node, loop_end=self.next_node
-                ).create_cfg(ast[4])
+                while_node.true_br = (
+                    self.enter_loop(start=while_node, end=self.next_node)
+                    .with_next(while_node)
+                    .create_cfg(ast[4])
+                )
                 self.close_scope()
                 return while_node
             elif ast[0].type == AstType.DO:
@@ -491,17 +482,17 @@ class StatementEnvironment:
                 cond = CondNode(
                     Expr.from_ast(ast[4], self.env), DummyNode(), self.next_node
                 )
-                cond.true_br = self.replace(
-                    next_node=cond, loop_start=cond, loop_end=self.next_node
-                ).create_cfg(ast[1])
+                cond.true_br = (
+                    self.enter_loop(start=cond, end=self.next_node)
+                    .with_next(cond)
+                    .create_cfg(ast[1])
+                )
                 self.close_scope()
                 return cond.true_br
             elif ast[0].type == AstType.FOR:
                 self.open_scope()
                 if ast[2].type == AstType.declaration:
-                    decl = self.replace(
-                        next_node=DummyNode(), loop_start=None, loop_end=None
-                    ).create_cfg(ast[2])
+                    decl = self.with_next(DummyNode()).create_cfg(ast[2])
                     assert isinstance(decl, AssignmentNode)
                 else:
                     assert ast[2].type == AstType.semicolon
@@ -518,16 +509,16 @@ class StatementEnvironment:
                 if ast[4].type == AstType.paren_right:
                     inc = None
                 else:
-                    inc = self.replace(
-                        next_node=cond, loop_start=None, loop_end=None
-                    ).create_cfg(
+                    inc = self.with_next(cond).create_cfg(
                         AstNode(
                             None, AstType.expression_statement, ast[4].range, [ast[4]]
                         )
                     )
-                cond.true_br = self.replace(
-                    next_node=inc or cond, loop_start=cond, loop_end=self.next_node
-                ).create_cfg(ast[5] if inc is None else ast[6])
+                cond.true_br = (
+                    self.enter_loop(start=cond, end=self.next_node)
+                    .with_next(inc or cond)
+                    .create_cfg(ast[5] if inc is None else ast[6])
+                )
                 self.close_scope()
                 return decl or cond
             else:
