@@ -12,4 +12,4 @@
 - [X] implement `assume()`
 - [ ] make the parser work with float literals
 - [ ] show which asserts failed and the generated models
-- [ ] add source locations to the cfg
+- [X] add source locations to the cfg

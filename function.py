@@ -29,6 +29,7 @@ from expr import (
     ForAll,
     Expr,
     Predicate,
+    Prop,
     Variable,
 )
 
@@ -132,8 +133,8 @@ class Function:
         vars = env.get_vars()
         for p in params:
             del vars[p]
-        vars = [Variable(v, t) for v, t in vars.items()]
-        params = [Variable(v, t) for v, t in params.items()]
+        vars = [Variable(None, v, t) for v, t in vars.items()]
+        params = [Variable(None, v, t) for v, t in params.items()]
         if horn:
             Function.set_cutpoints(cfg, vars + params)
         return Function(cfg=cfg, horn=horn, name=fn_name, vars=vars, params=params,)
@@ -141,13 +142,14 @@ class Function:
     def get_proof_rule(self) -> Expr:
         assert not self.horn
         rule = And(
+            None,
             tuple(
                 path.get_proof_rule()
                 for path in self.cfg.generate_paths(BasicPath.empty(), set())
-            )
+            ),
         )
         if self.vars:
-            return ForAll(self.vars, rule)
+            return ForAll(None, self.vars, rule)
         else:
             return rule
 
@@ -155,18 +157,22 @@ class Function:
         assert self.horn
         vars = self.vars + self.params
         return [
-            ForAll(vars, path.get_proof_rule())
+            ForAll(None, vars, path.get_proof_rule())
             for path in self.cfg.generate_paths(BasicPath.empty(), set())
         ]
 
-    def get_failing_props(self) -> Iterator[Expr]:
+    def get_failing_paths(self) -> Iterator[BasicPath]:
         assert not self.horn
         for path in self.cfg.generate_paths(BasicPath.empty(), set()):
             prop = path.get_proof_rule()
             solver = z3.Solver()
             solver.add(z3.Not(prop.as_z3()))
             if solver.check().r != -1:
-                yield prop
+                yield path
+
+    def get_failing_props(self) -> Iterator[Expr]:
+        for path in self.get_failing_paths():
+            yield path.get_proof_rule()
 
     def check(self) -> CheckResult:
         """
@@ -197,8 +203,7 @@ class Function:
                 return Unknown(result.r)
 
     def check_iter(self) -> CheckResult:
-        prop = next(self.get_failing_props(), None)
-        if prop is None:
+        if next(self.get_failing_paths(), None) is None:
             return Ok()
         else:
             return Fail()
@@ -376,8 +381,12 @@ class Function:
             node_cp = id2node[cp]
 
             new_node = CutpointNode(
+                None,
                 Predicate(
-                    name=f"P{index}", arguments=cast("list[Expr]", vars), sorts=sorts,
+                    None,
+                    name=f"P{index}",
+                    arguments=cast("list[Expr]", vars),
+                    sorts=sorts,
                 ),
                 node_cp,
             )

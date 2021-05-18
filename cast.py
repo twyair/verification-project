@@ -102,10 +102,19 @@ class AstType(enum.Enum):
 
 @dataclass(frozen=True)
 class AstRange:
-    startLineNumber: int
-    startColumn: int
-    endLineNumber: int
-    endColumn: int
+    start_line: int
+    start_column: int
+    end_line: int
+    end_column: int
+
+    @staticmethod
+    def from_json(d: dict[str, int]) -> AstRange:
+        return AstRange(
+            start_line=d["startLineNumber"],
+            start_column=d["startColumn"],
+            end_line=d["endLineNumber"],
+            end_column=d["endColumn"],
+        )
 
 
 @dataclass(frozen=True)
@@ -123,6 +132,6 @@ def parse(ast: dict[str, Any]) -> AstNode:
     return AstNode(
         text=ast.get("text", None),
         type=AstType(ast["type"]),
-        range=AstRange(**ast["range"]),
+        range=AstRange.from_json(ast["range"]),
         children=[parse(c) for c in ast["children"]] if ast["children"] else [],
     )
