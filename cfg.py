@@ -260,6 +260,11 @@ class StatementEnvironment:
     remembers: list[list[Expr]]
     labels: list[tuple[Optional[Expr], CfgNode]]
 
+    @staticmethod
+    def new(env: Environment) -> StatementEnvironment:
+        end_node = EndNode(None)
+        return StatementEnvironment(end_node, end_node, None, None, env, [], [])
+
     def with_next(self, next_node: CfgNode) -> StatementEnvironment:
         return dataclasses.replace(self, next_node=next_node)
 
@@ -541,11 +546,5 @@ def create_cfg(ast: AstNode, requires: Optional[Expr], env: Environment) -> CfgN
     body = ast[-1]
     assert body.type == AstType.compound_statement
 
-    end_node = EndNode(None)
-    return StartNode(
-        requires,
-        StatementEnvironment(end_node, end_node, None, None, env, [], []).create_cfg(
-            body
-        ),
-    )
+    return StartNode(requires, StatementEnvironment.new(env).create_cfg(body))
 
