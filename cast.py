@@ -100,7 +100,10 @@ class AstType(enum.Enum):
     argument_expression_list = "argument_expression_list"
 
 
-@dataclass(frozen=True)
+LINE_NUM_DIFF = 7
+
+
+@dataclass(frozen=True, order=True)
 class AstRange:
     start_line: int
     start_column: int
@@ -110,9 +113,9 @@ class AstRange:
     @staticmethod
     def from_json(d: dict[str, int]) -> AstRange:
         return AstRange(
-            start_line=d["startLineNumber"],
+            start_line=d["startLineNumber"] - LINE_NUM_DIFF,
             start_column=d["startColumn"],
-            end_line=d["endLineNumber"],
+            end_line=d["endLineNumber"] - LINE_NUM_DIFF,
             end_column=d["endColumn"],
         )
 

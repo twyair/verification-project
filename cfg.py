@@ -30,10 +30,11 @@ class BasicPath:
     transformation: dict[str, Expr]
     assertion_start: Optional[Expr]
     assertion_end: Optional[Expr]
+    nodes: list[CfgNode]
 
     @staticmethod
     def empty() -> BasicPath:
-        return BasicPath([], {}, None, None)
+        return BasicPath([], {}, None, None, [])
 
     def copy(self) -> BasicPath:
         return BasicPath(
@@ -41,6 +42,7 @@ class BasicPath:
             self.transformation.copy(),
             self.assertion_start,
             self.assertion_end,
+            self.nodes.copy(),
         )
 
     def condition(self, cond: Expr) -> BasicPath:
@@ -81,6 +83,41 @@ class BasicPath:
                 else self.assertion_end
             )
 
+    def append(self, node: CfgNode) -> BasicPath:
+        cp = self.copy()
+        cp.nodes.append(node)
+        return cp
+
+    def get_code_range(self) -> list[AstRange]:
+        ranges: list[AstRange] = sorted(
+            n.code_location for n in self.nodes if n.code_location is not None
+        )
+        if not ranges:
+            return []
+        fin = []
+        prev = ranges[0]
+        for r in ranges[1:]:
+            if prev is None:
+                prev = r
+            elif r.start_line < prev.end_line or (
+                r.start_line == prev.end_line and r.start_column <= prev.end_column
+            ):
+                if r.end_line > prev.end_line or (
+                    r.end_line == prev.end_line and r.end_column > prev.end_column
+                ):
+                    prev = AstRange(
+                        start_line=prev.start_line,
+                        start_column=prev.start_column,
+                        end_line=r.end_line,
+                        end_column=r.end_column,
+                    )
+            else:
+                fin.append(prev)
+                prev = r
+        if prev is not None:
+            fin.append(prev)
+        return fin
+
 
 @dataclass
 class CfgNode:
@@ -117,7 +154,9 @@ class StartNode(CfgNode):
         self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         yield from self.next_node.generate_paths(
-            path if self.requires is None else path.assert_start(self.requires),
+            (
+                path if self.requires is None else path.assert_start(self.requires)
+            ).append(self),
             visited_asserts,
         )
 
@@ -138,7 +177,7 @@ class EndNode(CfgNode):
     ) -> Iterator[BasicPath]:
         if self.assertion is not None and id(self) not in visited_asserts:
             visited_asserts.add(id(self))
-            yield path.assert_end(self.assertion)
+            yield path.assert_end(self.assertion).append(self)
 
     def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
         pass
@@ -155,10 +194,10 @@ class CondNode(CfgNode):
     ) -> Iterator[BasicPath]:
         condition = self.condition
         yield from self.true_br.generate_paths(
-            path.condition(condition), visited_asserts
+            path.condition(condition).append(self), visited_asserts
         )
         yield from self.false_br.generate_paths(
-            path.condition(Not(None, condition)), visited_asserts
+            path.condition(Not(None, condition)).append(self), visited_asserts
         )
 
     def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
@@ -182,7 +221,7 @@ class AssignmentNode(CfgNode):
         self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         yield from self.next_node.generate_paths(
-            path.transform(self.var.var, self.expression), visited_asserts
+            path.transform(self.var.var, self.expression).append(self), visited_asserts
         )
 
     def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
@@ -202,7 +241,7 @@ class AssumeNode(CfgNode):
         self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
         yield from self.next_node.generate_paths(
-            path.condition(self.expression), visited_asserts
+            path.condition(self.expression).append(self), visited_asserts
         )
 
     def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
@@ -221,12 +260,13 @@ class AssertNode(CfgNode):
     def generate_paths(
         self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
-        yield path.assert_end(self.assertion)
+        yield path.assert_end(self.assertion).append(self)
         if id(self) in visited_asserts:
             return
         visited_asserts.add(id(self))
         yield from self.next_node.generate_paths(
-            BasicPath.empty().assert_start(self.assertion), visited_asserts,
+            BasicPath.empty().assert_start(self.assertion).append(self),
+            visited_asserts,
         )
 
     def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
@@ -245,12 +285,13 @@ class CutpointNode(CfgNode):
     def generate_paths(
         self, path: BasicPath, visited_asserts: set[int],
     ) -> Iterator[BasicPath]:
-        yield path.assert_end(self.predicate)
+        yield path.assert_end(self.predicate).append(self)
         if id(self) in visited_asserts:
             return
         visited_asserts.add(id(self))
         yield from self.next_node.generate_paths(
-            BasicPath.empty().assert_start(self.predicate), visited_asserts,
+            BasicPath.empty().assert_start(self.predicate).append(self),
+            visited_asserts,
         )
 
 
