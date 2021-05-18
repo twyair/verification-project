@@ -316,7 +316,8 @@ int binary_search(int arr[], int size, int key) {
         arr[ret] == key && ret < size && ret >= 0,
         ret == -1
     ));
-    phantom({
+#ifdef ANNOTATIONS
+    {
         remember(
             forall(k, range(0, size - 1), arr[k] <= arr[k + 1])
         );
@@ -334,7 +335,8 @@ int binary_search(int arr[], int size, int key) {
                 && i < size && i >= 0
             );
         }
-    });
+    }
+#endif
     remember(
         forall(k, range(0, size), forall(t, range(0, k + 1), arr[t] <= arr[k]))
     );

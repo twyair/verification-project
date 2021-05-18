@@ -8,6 +8,5 @@
 #define phantom(x)
 #define assume(x)
 #else
-#define is_nan(x) (!(x < 0.0 || x > 0.0 || x == 0.0 || x == -0.0))
 #define phantom(x) x
 #endif
