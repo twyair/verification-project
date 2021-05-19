@@ -298,6 +298,7 @@ class CutpointNode(CfgNode):
 @dataclass(frozen=True)
 class StatementEnvironment:
     next_node: CfgNode
+    start_node: StartNode
     end_node: EndNode
     loop_start: Optional[CfgNode]
     loop_end: Optional[CfgNode]
@@ -308,7 +309,16 @@ class StatementEnvironment:
     @staticmethod
     def new(env: Environment) -> StatementEnvironment:
         end_node = EndNode(None, None)
-        return StatementEnvironment(end_node, end_node, None, None, env, [], [])
+        return StatementEnvironment(
+            end_node,
+            StartNode(None, None, DummyNode(None)),
+            end_node,
+            None,
+            None,
+            env,
+            [],
+            [],
+        )
 
     def with_next(self, next_node: CfgNode) -> StatementEnvironment:
         return dataclasses.replace(self, next_node=next_node)
@@ -457,6 +467,9 @@ class StatementEnvironment:
                     self.end_node.code_location = ast.range
                     return self.next_node
                 elif fn == "requires":
+                    assert self.start_node.requires is None
+                    self.start_node.requires = Expr.from_ast(ast[0][2], self.env)
+                    self.start_node.code_location = ast.range
                     return self.next_node
                 elif fn == "freeze":
                     args = ast[0][2]
@@ -618,6 +631,7 @@ def create_cfg(ast: AstNode, requires: Optional[Expr], env: Environment) -> CfgN
     body = ast[-1]
     assert body.type == AstType.compound_statement
 
-    # FIXME: add code_location
-    return StartNode(None, requires, StatementEnvironment.new(env).create_cfg(body))
+    builder = StatementEnvironment.new(env)
+    builder.start_node.next_node = builder.create_cfg(body)
+    return builder.start_node
 

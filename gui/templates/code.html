@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+<style>
+    .highlight {
+        background-color: yellow;
+    }
+    .code-block {
+        width: 47%;
+        height: 90vh;
+        overflow: scroll;
+        float: left;
+    }
+    .interface {
+        width: 47%;
+        height: 100vh;
+        float: right;
+        margin-top: 1em;
+    }
+    #select-path {
+        width: 95%;
+        overflow: scroll;
+    }
+</style>
+
+<pre><code id="code" class='C++ code-block'>{{ program|safe }}</code></pre>
+
+<div class="interface">
+    <div id="interface-fail">
+        <h2>FAIL</h2>
+        <select id="select-path" size="5" onchange="select_path()">
+            {% for i, prop in props %}
+                <option value="{{ i }}">{{ prop }}</option>
+            {% endfor %}
+        </select>
+        <br>
+        {% for i, path in paths %}
+            <div id="path{{ i }}" hidden>
+                <h4>reachability condition</h4>
+                <p>{{ path["reachability"] }}</p>
+                <h4>transformation</h4>
+                {% for t in path["transformation"] %}
+                    <p>{{ t }}</p>
+                {% endfor %}
+                <h4>model</h4>
+                {% for t in path["model"] %}
+                    <p>{{ t }}</p>
+                {% endfor %}
+            </div>
+        {% endfor %}
+    </div>
+    <div id="interface-ok">
+        <h2>OK</h2>
+    </div>
+</div>
+
+<script>
+    hljs.highlightAll();
+    path_classes = {{ path_classes|safe }};
+
+    function highlight_path(index) {
+        for (const r of path_classes[index]) {
+            const elem = document.getElementsByClassName(r);
+            for (const e of elem) {
+                e.classList.add("highlight");
+            }
+        }
+    }
+
+    function unhighlight_path(index) {
+        for (const r of path_classes[index]) {
+            const elem = document.getElementsByClassName(r);
+            for (const e of elem) {
+                e.classList.remove("highlight");
+            }
+        }
+    }
+
+    var selected_path = null;
+
+    function select_path() {
+        if (selected_path !== null) {
+            unhighlight_path(selected_path);
+            document.getElementById("path" + selected_path).setAttribute("hidden", "");
+        }
+        const index = document.getElementById("select-path").value;
+        selected_path = index;
+        const path_element = document.getElementById("path" + index);
+        path_element.removeAttribute("hidden");
+        highlight_path(index);
+    }
+
+    
+
+    const code_block = document.getElementById("code");
+    code_block.scrollTo({top: code_block.scrollHeight * {{ curr_line }} / {{ total_lines }} });
+
+    const if_fail = document.getElementById("interface-fail");
+    const if_ok = document.getElementById("interface-ok");
+</script>
+
+{% if ok %}
+    <script>
+        if_fail.setAttribute("hidden", "");
+    </script>
+{% else %}
+    <script>
+        if_ok.setAttribute("hidden", "");
+    </script>
+{% endif %}
+
+</body>
+</html>

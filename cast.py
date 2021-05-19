@@ -100,7 +100,7 @@ class AstType(enum.Enum):
     argument_expression_list = "argument_expression_list"
 
 
-LINE_NUM_DIFF = 10
+LINE_NUM_DIFF = 41
 
 
 @dataclass(frozen=True, order=True)

@@ -426,7 +426,7 @@ class Function:
         )
 
         lines = src.splitlines()
-        fin_src = "<pre><code class='C++'>"
+        fin_src = ""
         line_number = 0  # 0-based
         column_number = 0  # 0-based
 
@@ -455,4 +455,4 @@ class Function:
         fin_src, line_number, column_number = copy_until_line(
             fin_src, line_number, column_number, len(lines)
         )
-        return fin_src + "</code></pre>"
+        return fin_src

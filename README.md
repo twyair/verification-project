@@ -11,7 +11,7 @@
 - [X] implement phantom variables
 - [X] implement `assume()`
 - [ ] make the parser work with float literals
-- [ ] show which asserts failed and the generated models
+- [X] implement a simple gui
 - [X] add source locations to the cfg
 
 ## features
