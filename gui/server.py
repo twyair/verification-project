@@ -1,6 +1,8 @@
 from __future__ import annotations
+from cast import AstRange
 import itertools
 from html import escape
+import os
 from function import Function
 from cfg import BasicPath, StartNode
 from flask import Flask, render_template
@@ -12,20 +14,29 @@ app = Flask(__name__)
 
 
 @app.route("/")
-def hello_world():
-    return "<p>Hello, World!</p>"
+def index() -> str:
+    files = [f[:-2] for f in os.listdir("benchmarks") if f.endswith(".c")]
+    return "\n".join(f"<p><a href='{f}/index.html'>{f}</a></p>" for f in files)
 
 
-def get_ranges(path):
+@app.route("/<filename>/index.html")
+def view_file(filename: str) -> str:
+    with open(f"benchmarks/{filename}.c") as src:
+        src = src.read()
+    fns = get_functions(filename)
+    return render_template("view_file.html", functions=list(fns), program=src)
+
+
+def get_ranges(path: BasicPath) -> list[AstRange]:
     return [n.code_location for n in path.nodes if n.code_location is not None]
 
 
-def range_to_class(r) -> str:
+def range_to_class(r: AstRange) -> str:
     return f"range_{r.start_line}_{r.start_column}_{r.end_line}_{r.end_column}"
 
 
-@app.route("/<filename>/<func>")
-def _(filename: str, func: str):
+@app.route("/<filename>/<func>/verify.html")
+def verify_func(filename: str, func: str) -> str:
     fns = get_functions(filename)
     f = fns[func]
 
@@ -79,9 +90,6 @@ def _(filename: str, func: str):
         s.add(Not(None, path.get_proof_rule()).as_z3())
         s.check()
         models.append(s.model())
-
-    assert isinstance(f.cfg, StartNode)
-    first_line = (f.cfg.code_location or f.cfg.next_node.code_location).start_line - 5
 
     return render_template(
         "code.html",

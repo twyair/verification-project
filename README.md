@@ -13,6 +13,7 @@
 - [ ] make the parser work with float literals
 - [X] implement a simple gui
 - [X] add source locations to the cfg
+- [ ] implement a gui for horn (invariants synthesis)
 
 ## features
 
