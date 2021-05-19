@@ -1,7 +1,10 @@
-from cfg import StartNode
+from __future__ import annotations
+import itertools
+from html import escape
+from function import Function
+from cfg import BasicPath, StartNode
 from flask import Flask, render_template
 import z3
-
 from main import get_functions
 from expr import And, Not
 
@@ -25,6 +28,49 @@ def range_to_class(r) -> str:
 def _(filename: str, func: str):
     fns = get_functions(filename)
     f = fns[func]
+
+    with open(f"benchmarks/{filename}.c") as src:
+        src = src.read()
+
+    ranges = sorted(
+        set(
+            itertools.chain.from_iterable(
+                get_ranges(p) for p in f.cfg.generate_paths(BasicPath.empty(), set())
+            )
+        )
+    )
+
+    lines = src.splitlines()
+    fin_src = ""
+    line_number = 0  # 0-based
+    column_number = 0  # 0-based
+
+    def copy_until_line(
+        fin_src: str, line_number: int, column_number: int, lim: int
+    ) -> tuple[str, int, int]:
+        while line_number < lim:
+            fin_src += escape(lines[line_number][column_number:] + "\n")
+            column_number = 0
+            line_number += 1
+        return fin_src, line_number, column_number
+
+    for r in ranges:
+        fin_src, line_number, column_number = copy_until_line(
+            fin_src, line_number, column_number, r.start_line - 1
+        )
+        fin_src += escape(lines[line_number][column_number : r.start_column - 1])
+        column_number = r.start_column - 1
+        fin_src += "<span class={}>".format(range_to_class(r))
+        fin_src, line_number, column_number = copy_until_line(
+            fin_src, line_number, column_number, r.end_line - 1
+        )
+        fin_src += escape(lines[line_number][column_number : r.end_column - 1])
+        column_number = r.end_column - 1
+        fin_src += "</span>"
+    fin_src, line_number, column_number = copy_until_line(
+        fin_src, line_number, column_number, len(lines)
+    )
+
     paths = list(f.get_failing_paths())
     props = enumerate(str(p.get_proof_rule()) for p in paths)
     models = []
@@ -39,7 +85,7 @@ def _(filename: str, func: str):
 
     return render_template(
         "code.html",
-        program=f.get_code_as_html(),
+        program=fin_src,
         ok=not paths,
         props=props,
         paths=enumerate(
@@ -60,6 +106,6 @@ def _(filename: str, func: str):
                 for index, path in enumerate(paths)
             }
         ),
-        curr_line=first_line,  # FIXME
-        total_lines=501,  # FIXME
+        curr_line=ranges[0].start_line - 2,
+        total_lines=len(lines),
     )
