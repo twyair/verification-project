@@ -22,7 +22,7 @@ def get_functions(filename: str, horn: bool = False) -> dict[str, Function]:
     return {
         f.name: f
         for f in (
-            Function.from_ast(child, horn=horn)
+            Function.from_ast(filename, child, horn=horn)
             for child in ast.children
             if child.type == AstType.function_definition
         )

@@ -336,7 +336,7 @@ class StatementEnvironment:
         elif ast.type == AstType.selection_statement:
             if ast[0].type == AstType.IF:
                 return CondNode(
-                    code_location=ast.range,
+                    code_location=ast[2].range,
                     condition=Expr.from_ast(ast[2], self.env),
                     true_br=self.create_cfg(ast[4]),
                     false_br=self.create_cfg(ast[6])

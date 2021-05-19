@@ -1,13 +1,14 @@
 from __future__ import annotations
 from dataclasses import dataclass
 import itertools
+from html import escape
 from typing import Iterator, Optional, cast
 
 import z3
 from pygraphviz.agraph import AGraph
 import networkx as nx
 
-from cast import AstNode, AstType
+from cast import AstNode, AstRange, AstType
 from cfg import (
     AssertNode,
     AssignmentNode,
@@ -76,6 +77,7 @@ class CounterExample(Fail):
 
 @dataclass(frozen=True)
 class Function:
+    filename: str
     name: str
     cfg: CfgNode
     horn: bool
@@ -83,7 +85,7 @@ class Function:
     vars: list[Variable]
 
     @staticmethod
-    def from_ast(ast: AstNode, horn: bool = False) -> Function:
+    def from_ast(filename: str, ast: AstNode, horn: bool = False) -> Function:
         declarator = next(
             c for c in ast.children if c.type == AstType.direct_declarator
         )
@@ -137,7 +139,9 @@ class Function:
         params = [Variable(None, v, t) for v, t in params.items()]
         if horn:
             Function.set_cutpoints(cfg, vars + params)
-        return Function(cfg=cfg, horn=horn, name=fn_name, vars=vars, params=params,)
+        return Function(
+            filename, cfg=cfg, horn=horn, name=fn_name, vars=vars, params=params,
+        )
 
     def get_proof_rule(self) -> Expr:
         assert not self.horn
@@ -404,3 +408,51 @@ class Function:
                         node.false_br = new_node
                 else:
                     assert False, f"unexpected node of type {type(node)}"
+
+    def get_code_as_html(self) -> str:
+        def get_ranges(path: BasicPath) -> list[AstRange]:
+            return [n.code_location for n in path.nodes if n.code_location is not None]
+
+        def range_to_class(r: AstRange) -> str:
+            return f"range_{r.start_line}_{r.start_column}_{r.end_line}_{r.end_column}"
+
+        with open(f"benchmarks/{self.filename}.c") as f:
+            src = f.read()
+
+        paths = list(self.cfg.generate_paths(BasicPath.empty(), set()))
+
+        ranges = sorted(
+            set(itertools.chain.from_iterable(get_ranges(p) for p in paths))
+        )
+
+        lines = src.splitlines()
+        fin_src = "<pre><code class='C++'>"
+        line_number = 0  # 0-based
+        column_number = 0  # 0-based
+
+        def copy_until_line(
+            fin_src: str, line_number: int, column_number: int, lim: int
+        ) -> tuple[str, int, int]:
+            while line_number < lim:
+                fin_src += escape(lines[line_number][column_number:] + "\n")
+                column_number = 0
+                line_number += 1
+            return fin_src, line_number, column_number
+
+        for r in ranges:
+            fin_src, line_number, column_number = copy_until_line(
+                fin_src, line_number, column_number, r.start_line - 1
+            )
+            fin_src += escape(lines[line_number][column_number : r.start_column - 1])
+            column_number = r.start_column - 1
+            fin_src += "<span class={}>".format(range_to_class(r))
+            fin_src, line_number, column_number = copy_until_line(
+                fin_src, line_number, column_number, r.end_line - 1
+            )
+            fin_src += escape(lines[line_number][column_number : r.end_column - 1])
+            column_number = r.end_column - 1
+            fin_src += "</span>"
+        fin_src, line_number, column_number = copy_until_line(
+            fin_src, line_number, column_number, len(lines)
+        )
+        return fin_src + "</code></pre>"
