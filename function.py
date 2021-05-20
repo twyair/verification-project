@@ -58,8 +58,15 @@ class Ok(CheckResult):
 
 
 @dataclass(frozen=True)
+class HornInvariant:
+    name: str
+    mapping: list[tuple[Expr, Expr]]
+    else_expr: Optional[Expr]
+
+
+@dataclass(frozen=True)
 class HornOk(CheckResult):
-    model: z3.ModelRef
+    invariants: list[HornInvariant]
 
     def is_ok(self) -> bool:
         return True
@@ -83,6 +90,7 @@ class Function:
     horn: bool
     params: list[Variable]
     vars: list[Variable]
+    invariants: Optional[list[Predicate]]
 
     @staticmethod
     def from_ast(filename: str, ast: AstNode, horn: bool = False) -> Function:
@@ -137,10 +145,17 @@ class Function:
             del vars[p]
         vars = [Variable(None, v, t) for v, t in vars.items()]
         params = [Variable(None, v, t) for v, t in params.items()]
+        invariants = None
         if horn:
-            Function.set_cutpoints(cfg, vars + params)
+            invariants = Function.set_cutpoints(cfg, vars + params)
         return Function(
-            filename, cfg=cfg, horn=horn, name=fn_name, vars=vars, params=params,
+            filename,
+            cfg=cfg,
+            horn=horn,
+            name=fn_name,
+            vars=vars,
+            params=params,
+            invariants=invariants,
         )
 
     def get_proof_rule(self) -> Expr:
@@ -190,7 +205,26 @@ class Function:
                 solver.add(p.as_z3())
             result = solver.check()
             if result.r == 1:
-                return HornOk(solver.model())
+                model = solver.model()
+                invariants: list[HornInvariant] = []
+                for invariant in self.invariants:
+                    d = next(d for d in model.decls() if d.name() == invariant.name)
+                    fn = model.get_interp(d)
+                    assert isinstance(fn, z3.FuncInterp)
+                    else_value = fn.else_value()
+                    mapping = fn.as_list()
+                    if else_value is not None:
+                        mapping = mapping[:-1]
+                    invariants.append(
+                        HornInvariant(
+                            invariant.name,
+                            [(Expr.from_z3(x), Expr.from_z3(y)) for x, y in mapping],
+                            None
+                            if else_value is None
+                            else Expr.from_z3(else_value, invariant.vars),
+                        )
+                    )
+                return HornOk(invariants)
             elif result.r == -1:
                 return HornFail()
             else:
@@ -326,7 +360,7 @@ class Function:
         graph.draw(path=filepath, prog="dot")
 
     @staticmethod
-    def set_cutpoints(cfg: CfgNode, vars: list[Variable]):
+    def set_cutpoints(cfg: CfgNode, vars: list[Variable]) -> list[Predicate]:
         graph = nx.DiGraph()
         id2node: dict[int, CfgNode] = {}
 
@@ -380,20 +414,20 @@ class Function:
 
         vars = sorted(vars, key=lambda v: v.var,)
         sorts = [v.type_.as_z3() for v in vars]
+        invariants = []
 
         for index, cp in enumerate(cutpoints):
             node_cp = id2node[cp]
 
-            new_node = CutpointNode(
+            invariant = Predicate(
                 None,
-                Predicate(
-                    None,
-                    name=f"P{index}",
-                    arguments=cast("list[Expr]", vars),
-                    sorts=sorts,
-                ),
-                node_cp,
+                name=f"P{index}",
+                arguments=cast("list[Expr]", vars),
+                sorts=sorts,
+                vars=vars,
             )
+            invariants.append(invariant)
+            new_node = CutpointNode(None, invariant, node_cp)
             for n in graph.predecessors(cp):
                 node = id2node[n]
                 if isinstance(
@@ -408,3 +442,4 @@ class Function:
                         node.false_br = new_node
                 else:
                     assert False, f"unexpected node of type {type(node)}"
+        return invariants
