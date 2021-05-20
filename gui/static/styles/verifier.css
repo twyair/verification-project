@@ -1,0 +1,19 @@
+.highlight {
+    background-color: yellow;
+}
+.code-block {
+    width: 47%;
+    height: 90vh;
+    overflow: scroll;
+    float: left;
+}
+.interface {
+    width: 47%;
+    height: 100vh;
+    float: right;
+    margin-top: 1em;
+}
+#select-path {
+    width: 95%;
+    overflow: scroll;
+}

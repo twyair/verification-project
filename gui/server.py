@@ -24,7 +24,7 @@ def view_file(filename: str) -> str:
     with open(f"benchmarks/{filename}.c") as src:
         src = src.read()
     fns = get_functions(filename)
-    return render_template("view_file.html", functions=list(fns), program=src)
+    return render_template("view_file.html.jinja", functions=list(fns), program=src)
 
 
 def get_ranges(path: BasicPath) -> list[AstRange]:
@@ -92,7 +92,7 @@ def verify_func(filename: str, func: str) -> str:
         models.append(s.model())
 
     return render_template(
-        "code.html",
+        "code.html.jinja",
         program=fin_src,
         ok=not paths,
         props=props,
@@ -105,12 +105,13 @@ def verify_func(filename: str, func: str) -> str:
                 "model": [
                     f"{var.name()} := {model.get_interp(var)}" for var in model.decls()
                 ],
+                "classes": [range_to_class(r) for r in get_ranges(path)],
             }
             for path, model in zip(paths, models)
         ),
         path_classes=str(
             {
-                str(index): [range_to_class(r) for r in get_ranges(path)]
+                index: [range_to_class(r) for r in get_ranges(path)]
                 for index, path in enumerate(paths)
             }
         ),
