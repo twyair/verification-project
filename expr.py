@@ -268,6 +268,35 @@ class Expr:
         else:
             assert False, f"unknown type {ast.type.value}"
 
+    @staticmethod
+    def from_z3(z, ctx: list[Variable] = None) -> Expr:
+        try:
+            fn = z.decl().name()
+        except:
+            sexpr: str = z.sexpr()
+            if sexpr.startswith("(:var"):
+                val = int(sexpr[len("(:var") : -1])
+                return ctx[val]
+            raise
+        if fn == "and":
+            return And(None, tuple(Expr.from_z3(e, ctx) for e in z.children()))
+        elif fn == "or":
+            return Or(None, tuple(Expr.from_z3(e, ctx) for e in z.children()))
+        elif fn == "not":
+            return Not(None, Expr.from_z3(z.arg(0), ctx))
+        elif fn in ("+", "-", "*", "/", "%"):
+            return BinaryExpr(
+                None, fn, Expr.from_z3(z.arg(0), ctx), Expr.from_z3(z.arg(1), ctx)
+            )
+        elif fn in (">=", "<=", "<", ">", "=", "!="):
+            return RelExpr(
+                None, fn, Expr.from_z3(z.arg(0), ctx), Expr.from_z3(z.arg(1), ctx)
+            )
+        elif fn == "Int":
+            return IntValue(None, z.as_long())
+        else:
+            return Variable(None, fn, INT)
+
 
 @dataclass(frozen=True)
 class RelExpr(Expr):
@@ -771,6 +800,7 @@ class Predicate(Prop):
     name: str
     arguments: list[Expr]
     sorts: list
+    vars: list[Variable]
 
     def assign(self, vars: dict[str, Expr]) -> Predicate:
         return Predicate(
@@ -778,6 +808,7 @@ class Predicate(Prop):
             name=self.name,
             arguments=[a.assign(vars) for a in self.arguments],
             sorts=self.sorts,
+            vars=self.vars,
         )
 
     def __str__(self) -> str:
