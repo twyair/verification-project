@@ -66,15 +66,13 @@ class BasicPath:
         # FIXME: handle the case when `reachability` is empty
         if self.assertion_start is not None:
             return Then(
-                None,
-                And(None, tuple(self.reachability) + (self.assertion_start,)),
+                And(tuple(self.reachability) + (self.assertion_start,)),
                 self.assertion_end,
             )
         else:
             return (
                 Then(
-                    None,
-                    And(None, tuple(self.reachability))
+                    And(tuple(self.reachability))
                     if len(self.reachability) >= 2
                     else self.reachability[0],
                     self.assertion_end,
@@ -197,7 +195,7 @@ class CondNode(CfgNode):
             path.condition(condition).append(self), visited_asserts
         )
         yield from self.false_br.generate_paths(
-            path.condition(Not(None, condition)).append(self), visited_asserts
+            path.condition(Not(condition)).append(self), visited_asserts
         )
 
     def replace(self, dummy: DummyNode, node: CfgNode, visited: set[int]):
@@ -367,7 +365,7 @@ class StatementEnvironment:
                     conds.append(
                         CondNode(
                             None,
-                            RelExpr(None, "==", switch_value, case_value),
+                            RelExpr("==", switch_value, case_value),
                             statement,
                             dummy,
                         )
@@ -407,7 +405,7 @@ class StatementEnvironment:
                     return AssignmentNode(
                         ast.range,
                         expression=Expr.from_ast(ast[1], self.env),
-                        var=Variable(None, "ret", self.env["ret"]),
+                        var=Variable("ret", self.env["ret"]),
                         next_node=self.end_node,
                     )
                 else:
@@ -442,7 +440,7 @@ class StatementEnvironment:
             return AssignmentNode(
                 ast.range,
                 expression=value,
-                var=Variable(ast[1][0].range, self.env.rename(var), type_),
+                var=Variable(self.env.rename(var), type_),
                 next_node=self.next_node,
             )
         elif ast.type == AstType.expression_statement:
@@ -456,7 +454,7 @@ class StatementEnvironment:
                     assertion = Expr.from_ast(ast[0][2], self.env)
                     remembers = tuple(chain.from_iterable(self.remembers))
                     assertion = (
-                        And(None, remembers + (assertion,)) if remembers else assertion
+                        And(remembers + (assertion,)) if remembers else assertion
                     )
                     return AssertNode(
                         ast.range, assertion=assertion, next_node=self.next_node,
@@ -496,14 +494,14 @@ class StatementEnvironment:
             ):
                 left = Expr.from_ast(ast[0][0], self.env)
                 operator = "+=" if ast[0][1].type == AstType.INC_OP else "-="
-                value = IntValue(None, 1)
+                value = IntValue(1)
             elif ast[0].type == AstType.unary_expression and ast[0][0].type in (
                 AstType.INC_OP,
                 AstType.DEC_OP,
             ):
                 left = Expr.from_ast(ast[0][1], self.env)
                 operator = "+=" if ast[0][0].type == AstType.INC_OP else "-="
-                value = IntValue(None, 1)
+                value = IntValue(1)
             elif ast[0].type != AstType.assignment_expression:
                 # FIXME
                 return self.next_node
@@ -518,7 +516,7 @@ class StatementEnvironment:
             # handle other assignment operators: *= /= %= += -= >>= <<= &= |= ^=
             if operator != "=":
                 operator = operator[:-1]
-                value = BinaryExpr(ast.range, operator=operator, lhs=left, rhs=value)
+                value = BinaryExpr(operator=operator, lhs=left, rhs=value)
 
             if isinstance(left, Variable):
                 return AssignmentNode(
@@ -531,10 +529,7 @@ class StatementEnvironment:
                     ast.range,
                     var=left.array,
                     expression=ArrayStore(
-                        value.code_location,
-                        array=left.array,
-                        index=left.index,
-                        value=value,
+                        array=left.array, index=left.index, value=value,
                     ),
                     next_node=self.next_node,
                 )
@@ -589,10 +584,7 @@ class StatementEnvironment:
                 else:
                     assert ast[3].type == AstType.semicolon
                     cond = CondNode(
-                        ast[3].range,
-                        BoolValue(None, True),
-                        DummyNode(None),
-                        self.next_node,
+                        ast[3].range, BoolValue(True), DummyNode(None), self.next_node,
                     )
                 if decl is not None:
                     decl.next_node = cond

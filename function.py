@@ -143,8 +143,8 @@ class Function:
         vars = env.get_vars()
         for p in params:
             del vars[p]
-        vars = [Variable(None, v, t) for v, t in vars.items()]
-        params = [Variable(None, v, t) for v, t in params.items()]
+        vars = [Variable(v, t) for v, t in vars.items()]
+        params = [Variable(v, t) for v, t in params.items()]
         invariants = None
         if horn:
             invariants = Function.set_cutpoints(cfg, vars + params)
@@ -161,14 +161,13 @@ class Function:
     def get_proof_rule(self) -> Expr:
         assert not self.horn
         rule = And(
-            None,
             tuple(
                 path.get_proof_rule()
                 for path in self.cfg.generate_paths(BasicPath.empty(), set())
             ),
         )
         if self.vars:
-            return ForAll(None, self.vars, rule)
+            return ForAll(self.vars, rule)
         else:
             return rule
 
@@ -176,7 +175,7 @@ class Function:
         assert self.horn
         vars = self.vars + self.params
         return [
-            ForAll(None, vars, path.get_proof_rule())
+            ForAll(vars, path.get_proof_rule())
             for path in self.cfg.generate_paths(BasicPath.empty(), set())
         ]
 
@@ -420,7 +419,6 @@ class Function:
             node_cp = id2node[cp]
 
             invariant = Predicate(
-                None,
                 name=f"P{index}",
                 arguments=cast("list[Expr]", vars),
                 sorts=sorts,

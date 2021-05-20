@@ -104,8 +104,6 @@ class Environment:
 
 @dataclass(frozen=True)
 class Expr:
-    code_location: Optional[AstRange]
-
     def assign(self, vars: dict[str, Expr]) -> Expr:
         raise NotImplementedError
 
@@ -124,7 +122,6 @@ class Expr:
             lhs, op, rhs = ast.children
             assert op.text is not None
             return RelExpr(
-                ast.range,
                 operator=op.text,
                 lhs=Expr.from_ast(lhs, env),
                 rhs=Expr.from_ast(rhs, env),
@@ -132,16 +129,12 @@ class Expr:
         elif ast.type == AstType.IDENTIFIER:
             assert ast.text is not None
             if ast.text in ("true", "false"):
-                return BoolValue(ast.range, ast.text == "true")
-            return Variable(ast.range, env.rename(ast.text), env[ast.text])
+                return BoolValue(ast.text == "true")
+            return Variable(env.rename(ast.text), env[ast.text])
         elif ast.type == AstType.logical_and_expression:
-            return And(
-                ast.range, (Expr.from_ast(ast[0], env), Expr.from_ast(ast[2], env))
-            )
+            return And((Expr.from_ast(ast[0], env), Expr.from_ast(ast[2], env)))
         elif ast.type == AstType.logical_or_expression:
-            return Or(
-                ast.range, (Expr.from_ast(ast[0], env), Expr.from_ast(ast[2], env))
-            )
+            return Or((Expr.from_ast(ast[0], env), Expr.from_ast(ast[2], env)))
         elif ast.type == AstType.primary_expression:
             return Expr.from_ast(ast[1], env)
         elif ast.type == AstType.postfix_expression:
@@ -172,23 +165,13 @@ class Expr:
                     if quantifier == "forall":
                         if isinstance(domain, tuple):
                             return ForAllRange(
-                                ast.range,
-                                var=Variable(args[0][0].range, var_name, ty),
-                                range=domain,
-                                prop=prop,
+                                var=Variable(var_name, ty), range=domain, prop=prop,
                             )
                         else:
-                            return ForAll(
-                                ast.range,
-                                vars=[Variable(args[0][0].range, var_name, ty)],
-                                prop=prop,
-                            )
+                            return ForAll(vars=[Variable(var_name, ty)], prop=prop,)
                     elif quantifier == "exists":
                         return Exists(
-                            ast.range,
-                            var=Variable(args[0][0].range, var_name, ty),
-                            domain=domain,
-                            prop=prop,
+                            var=Variable(var_name, ty), domain=domain, prop=prop,
                         )
                     else:
                         assert False, f"unknown quantifier {quantifier}"
@@ -196,14 +179,12 @@ class Expr:
                     args = ast[2]
                     if args[0].type == AstType.argument_expression_list:
                         return IfThenElse(
-                            ast.range,
                             Expr.from_ast(args[0][0], env),
                             Expr.from_ast(args[0][2], env),
                             Expr.from_ast(args[2], env),
                         )
                     else:
                         return Then(
-                            ast.range,
                             if_=Expr.from_ast(args[0], env),
                             then=Expr.from_ast(args[2], env),
                         )
@@ -212,18 +193,16 @@ class Expr:
 
             assert ast[1].type == AstType.bracket_left
             return ArraySelect(
-                ast.range,
-                array=Expr.from_ast(ast[0], env),
-                index=Expr.from_ast(ast[2], env),
+                array=Expr.from_ast(ast[0], env), index=Expr.from_ast(ast[2], env),
             )
         elif ast.type == AstType.CONSTANT:
             assert ast.text is not None
             if ast.text in ("true", "false",):
-                return BoolValue(ast.range, ast.text == "true")
+                return BoolValue(ast.text == "true")
             elif ast.text.isnumeric():
-                return IntValue(ast.range, int(ast.text))
+                return IntValue(int(ast.text))
             else:
-                return RealValue(ast.range, float(ast.text))
+                return RealValue(float(ast.text))
         elif ast.type in (
             AstType.additive_expression,
             AstType.multiplicative_expression,
@@ -234,7 +213,6 @@ class Expr:
         ):
             assert ast[1].text is not None
             return BinaryExpr(
-                ast.range,
                 operator=ast[1].text,
                 lhs=Expr.from_ast(ast[0], env),
                 rhs=Expr.from_ast(ast[2], env),
@@ -243,14 +221,11 @@ class Expr:
             op = ast[0].text
             assert op is not None
             if op == "!":
-                return Not(ast.range, Expr.from_ast(ast[1], env))
+                return Not(Expr.from_ast(ast[1], env))
             else:
-                return UnaryExpr(
-                    ast.range, operator=op, operand=Expr.from_ast(ast[1], env)
-                )
+                return UnaryExpr(operator=op, operand=Expr.from_ast(ast[1], env))
         elif ast.type == AstType.conditional_expression:
             return IfThenElse(
-                ast.range,
                 condition=Expr.from_ast(ast[0], env),
                 value_true=Expr.from_ast(ast[2], env),
                 value_false=Expr.from_ast(ast[4], env),
@@ -260,9 +235,9 @@ class Expr:
             ty = AtomicType(ast[1].text)
             expr = Expr.from_ast(ast[3], env)
             if ty == INT:
-                return AsInt(ast.range, expr)
+                return AsInt(expr)
             elif ty == FLOAT:
-                return AsReal(ast.range, expr)
+                return AsReal(expr)
             else:
                 assert False, f"can't cast expr to type {ty}"
         else:
@@ -279,23 +254,21 @@ class Expr:
                 return ctx[val]
             raise
         if fn == "and":
-            return And(None, tuple(Expr.from_z3(e, ctx) for e in z.children()))
+            return And(tuple(Expr.from_z3(e, ctx) for e in z.children()))
         elif fn == "or":
-            return Or(None, tuple(Expr.from_z3(e, ctx) for e in z.children()))
+            return Or(tuple(Expr.from_z3(e, ctx) for e in z.children()))
         elif fn == "not":
-            return Not(None, Expr.from_z3(z.arg(0), ctx))
+            return Not(Expr.from_z3(z.arg(0), ctx))
         elif fn in ("+", "-", "*", "/", "%"):
             return BinaryExpr(
-                None, fn, Expr.from_z3(z.arg(0), ctx), Expr.from_z3(z.arg(1), ctx)
+                fn, Expr.from_z3(z.arg(0), ctx), Expr.from_z3(z.arg(1), ctx)
             )
         elif fn in (">=", "<=", "<", ">", "=", "!="):
-            return RelExpr(
-                None, fn, Expr.from_z3(z.arg(0), ctx), Expr.from_z3(z.arg(1), ctx)
-            )
+            return RelExpr(fn, Expr.from_z3(z.arg(0), ctx), Expr.from_z3(z.arg(1), ctx))
         elif fn == "Int":
-            return IntValue(None, z.as_long())
+            return IntValue(z.as_long())
         else:
-            return Variable(None, fn, INT)
+            return Variable(fn, INT)
 
 
 @dataclass(frozen=True)
@@ -316,7 +289,6 @@ class RelExpr(Expr):
 
     def assign(self, vars: dict[str, Expr]) -> RelExpr:
         return RelExpr(
-            code_location=self.code_location,
             operator=self.operator,
             lhs=self.lhs.assign(vars),
             rhs=self.rhs.assign(vars),
@@ -338,10 +310,7 @@ class And(Expr):
     args: tuple[Expr, ...]
 
     def assign(self, vars: dict[str, Expr]) -> And:
-        return And(
-            code_location=self.code_location,
-            args=tuple(a.assign(vars) for a in self.args),
-        )
+        return And(args=tuple(a.assign(vars) for a in self.args),)
 
     def __str__(self) -> str:
         return " ∧ ".join(
@@ -361,10 +330,7 @@ class Or(Expr):
     args: tuple[Expr, ...]
 
     def assign(self, vars: dict[str, Expr]) -> Or:
-        return Or(
-            code_location=self.code_location,
-            args=tuple(a.assign(vars) for a in self.args),
-        )
+        return Or(args=tuple(a.assign(vars) for a in self.args),)
 
     def __str__(self) -> str:
         return " ∨ ".join(
@@ -384,7 +350,7 @@ class Not(Expr):
     operand: Expr
 
     def assign(self, vars: dict[str, Expr]) -> Not:
-        return Not(code_location=self.code_location, operand=self.operand.assign(vars))
+        return Not(operand=self.operand.assign(vars))
 
     def __str__(self) -> str:
         return f"¬({self.operand})"
@@ -435,7 +401,6 @@ class BinaryExpr(Expr):
 
     def assign(self, vars: dict[str, Expr]) -> BinaryExpr:
         return BinaryExpr(
-            code_location=self.code_location,
             operator=self.operator,
             rhs=self.rhs.assign(vars),
             lhs=self.lhs.assign(vars),
@@ -489,11 +454,7 @@ class UnaryExpr(Expr):
     }
 
     def assign(self, vars: dict[str, Expr]) -> UnaryExpr:
-        return UnaryExpr(
-            code_location=self.code_location,
-            operator=self.operator,
-            operand=self.operand.assign(vars),
-        )
+        return UnaryExpr(operator=self.operator, operand=self.operand.assign(vars),)
 
     def __str__(self) -> str:
         return self.operator + (
@@ -514,7 +475,7 @@ class AsInt(Expr):
     expr: Expr
 
     def assign(self, vars: dict[str, Expr]) -> AsInt:
-        return AsInt(code_location=self.code_location, expr=self.expr.assign(vars))
+        return AsInt(expr=self.expr.assign(vars))
 
     def __str__(self) -> str:
         return f"int({self.expr})"
@@ -531,7 +492,7 @@ class AsReal(Expr):
     expr: Expr
 
     def assign(self, vars: dict[str, Expr]) -> AsReal:
-        return AsReal(code_location=self.code_location, expr=self.expr.assign(vars))
+        return AsReal(expr=self.expr.assign(vars))
 
     def __str__(self) -> str:
         return f"real({self.expr})"
@@ -602,7 +563,6 @@ class IfThenElse(Expr):
 
     def assign(self, vars: dict[str, Expr]) -> IfThenElse:
         return IfThenElse(
-            code_location=self.code_location,
             condition=self.condition.assign(vars),
             value_true=self.value_true.assign(vars),
             value_false=self.value_false.assign(vars),
@@ -628,7 +588,6 @@ class ArrayStore(Expr):
 
     def assign(self, vars: dict[str, Expr]) -> ArrayStore:
         return ArrayStore(
-            code_location=self.code_location,
             array=self.array.assign(vars),
             index=self.index.assign(vars),
             value=self.value.assign(vars),
@@ -651,9 +610,7 @@ class ArraySelect(Expr):
 
     def assign(self, vars: dict[str, Expr]) -> ArraySelect:
         return ArraySelect(
-            code_location=self.code_location,
-            array=self.array.assign(vars),
-            index=self.index.assign(vars),
+            array=self.array.assign(vars), index=self.index.assign(vars),
         )
 
     def __str__(self) -> str:
@@ -679,11 +636,7 @@ class Then(Prop):
     then: Expr
 
     def assign(self, vars: dict[str, Expr]) -> Then:
-        return Then(
-            code_location=self.code_location,
-            if_=self.if_.assign(vars),
-            then=self.then.assign(vars),
-        )
+        return Then(if_=self.if_.assign(vars), then=self.then.assign(vars),)
 
     def __str__(self) -> str:
         res = f"{self.if_} → "
@@ -705,11 +658,7 @@ class ForAll(Prop):
     def assign(self, vars: dict[str, Expr]) -> ForAll:
         for var in self.vars:
             assert var.var not in vars
-        return ForAll(
-            code_location=self.code_location,
-            vars=self.vars,
-            prop=self.prop.assign(vars),
-        )
+        return ForAll(vars=self.vars, prop=self.prop.assign(vars),)
 
     def __str__(self) -> str:
         return (
@@ -733,7 +682,6 @@ class ForAllRange(Prop):
             vars = vars.copy()
             del vars[self.var.var]
         return ForAllRange(
-            code_location=self.code_location,
             var=self.var,
             range=(self.range[0].assign(vars), self.range[1].assign(vars)),
             prop=self.prop.assign(vars),
@@ -766,12 +714,7 @@ class Exists(Prop):
         domain = self.domain
         if isinstance(domain, tuple):
             domain = (domain[0].assign(vars), domain[1].assign(vars))
-        return Exists(
-            code_location=self.code_location,
-            var=self.var,
-            domain=domain,
-            prop=self.prop.assign(vars),
-        )
+        return Exists(var=self.var, domain=domain, prop=self.prop.assign(vars),)
 
     def __str__(self) -> str:
         domain = (
@@ -804,7 +747,6 @@ class Predicate(Prop):
 
     def assign(self, vars: dict[str, Expr]) -> Predicate:
         return Predicate(
-            code_location=self.code_location,
             name=self.name,
             arguments=[a.assign(vars) for a in self.arguments],
             sorts=self.sorts,
