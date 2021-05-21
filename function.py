@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+import dataclasses
 import itertools
 from html import escape
 from typing import Iterator, Optional, cast
@@ -63,6 +64,15 @@ class HornInvariant:
     mapping: list[tuple[Expr, Expr]]
     else_expr: Optional[Expr]
 
+    def __str__(self) -> str:
+        return (
+            "["
+            + ", ".join(f"{x} ⟼ {y}" for x, y in self.mapping)
+            + (", else ⟼ " if self.mapping else "")
+            + str(self.else_expr)
+            + "]"
+        )
+
 
 @dataclass(frozen=True)
 class HornOk(CheckResult):
@@ -83,17 +93,15 @@ class CounterExample(Fail):
 
 
 @dataclass(frozen=True)
-class Function:
+class BaseFunction:
     filename: str
     name: str
     cfg: CfgNode
-    horn: bool
     params: list[Variable]
     vars: list[Variable]
-    invariants: Optional[list[Predicate]]
 
-    @staticmethod
-    def from_ast(filename: str, ast: AstNode, horn: bool = False) -> Function:
+    @classmethod
+    def from_ast(cls, filename: str, ast: AstNode, **extras):
         declarator = next(
             c for c in ast.children if c.type == AstType.direct_declarator
         )
@@ -145,105 +153,7 @@ class Function:
             del vars[p]
         vars = [Variable(v, t) for v, t in vars.items()]
         params = [Variable(v, t) for v, t in params.items()]
-        invariants = None
-        if horn:
-            invariants = Function.set_cutpoints(cfg, vars + params)
-        return Function(
-            filename,
-            cfg=cfg,
-            horn=horn,
-            name=fn_name,
-            vars=vars,
-            params=params,
-            invariants=invariants,
-        )
-
-    def get_proof_rule(self) -> Expr:
-        assert not self.horn
-        rule = And(
-            tuple(
-                path.get_proof_rule()
-                for path in self.cfg.generate_paths(BasicPath.empty(), set())
-            ),
-        )
-        if self.vars:
-            return ForAll(self.vars, rule)
-        else:
-            return rule
-
-    def get_proof_rule_horn(self) -> list[Expr]:
-        assert self.horn
-        vars = self.vars + self.params
-        return [
-            ForAll(vars, path.get_proof_rule())
-            for path in self.cfg.generate_paths(BasicPath.empty(), set())
-        ]
-
-    def get_failing_paths(self) -> Iterator[BasicPath]:
-        assert not self.horn
-        for path in self.cfg.generate_paths(BasicPath.empty(), set()):
-            prop = path.get_proof_rule()
-            solver = z3.Solver()
-            solver.add(z3.Not(prop.as_z3()))
-            if solver.check().r != -1:
-                yield path
-
-    def get_failing_props(self) -> Iterator[Expr]:
-        for path in self.get_failing_paths():
-            yield path.get_proof_rule()
-
-    def check(self) -> CheckResult:
-        """
-        checks whether the function's proof rule is satisfiable
-        if it is, `check()` returns an `Ok`/`HornOk` object
-        otherwise, `check()` returns a `CounterExample`/`Unknown`/`HornFail` object
-        """
-        if self.horn:
-            solver = z3.SolverFor("HORN")
-            for p in self.get_proof_rule_horn():
-                solver.add(p.as_z3())
-            result = solver.check()
-            if result.r == 1:
-                model = solver.model()
-                invariants: list[HornInvariant] = []
-                for invariant in self.invariants:
-                    d = next(d for d in model.decls() if d.name() == invariant.name)
-                    fn = model.get_interp(d)
-                    assert isinstance(fn, z3.FuncInterp)
-                    else_value = fn.else_value()
-                    mapping = fn.as_list()
-                    if else_value is not None:
-                        mapping = mapping[:-1]
-                    invariants.append(
-                        HornInvariant(
-                            invariant.name,
-                            [(Expr.from_z3(x), Expr.from_z3(y)) for x, y in mapping],
-                            None
-                            if else_value is None
-                            else Expr.from_z3(else_value, invariant.vars),
-                        )
-                    )
-                return HornOk(invariants)
-            elif result.r == -1:
-                return HornFail()
-            else:
-                return Unknown(result.r)
-        else:
-            solver = z3.Solver()
-            solver.add(z3.Not(self.get_proof_rule().as_z3()))
-            result = solver.check()
-            if result.r == 1:
-                return CounterExample(solver.model())
-            elif result.r == -1:
-                return Ok()
-            else:
-                return Unknown(result.r)
-
-    def check_iter(self) -> CheckResult:
-        if next(self.get_failing_paths(), None) is None:
-            return Ok()
-        else:
-            return Fail()
+        return cls(filename, cfg=cfg, name=fn_name, vars=vars, params=params, **extras)
 
     def draw_cfg(self, no_content=False):
         filepath = f"cfg-img/{self.name}.svg"
@@ -358,6 +268,99 @@ class Function:
 
         graph.draw(path=filepath, prog="dot")
 
+
+@dataclass(frozen=True)
+class Function(BaseFunction):
+    def get_proof_rule(self) -> Expr:
+        rule = And(
+            tuple(
+                path.get_proof_rule()
+                for path in self.cfg.generate_paths(BasicPath.empty(), set())
+            ),
+        )
+        if self.vars:
+            return ForAll(self.vars, rule)
+        else:
+            return rule
+
+    def get_failing_paths(self) -> Iterator[BasicPath]:
+        for path in self.cfg.generate_paths(BasicPath.empty(), set()):
+            prop = path.get_proof_rule()
+            solver = z3.Solver()
+            solver.add(z3.Not(prop.as_z3()))
+            if solver.check().r != -1:
+                yield path
+
+    def get_failing_props(self) -> Iterator[Expr]:
+        for path in self.get_failing_paths():
+            yield path.get_proof_rule()
+
+    def check(self) -> CheckResult:
+        """
+        checks whether the function's proof rule is satisfiable
+        if it is, `check()` returns an `Ok`/`HornOk` object
+        otherwise, `check()` returns a `CounterExample`/`Unknown`/`HornFail` object
+        """
+
+        solver = z3.Solver()
+        solver.add(z3.Not(self.get_proof_rule().as_z3()))
+        result = solver.check()
+        if result.r == 1:
+            return CounterExample(solver.model())
+        elif result.r == -1:
+            return Ok()
+        else:
+            return Unknown(result.r)
+
+    def check_iter(self) -> CheckResult:
+        if next(self.get_failing_paths(), None) is None:
+            return Ok()
+        else:
+            return Fail()
+
+
+@dataclass(frozen=True)
+class HornFunction(BaseFunction):
+    invariants: list[Predicate]
+
+    def get_proof_rule(self) -> list[Expr]:
+        vars = self.vars + self.params
+        return [
+            ForAll(vars, path.get_proof_rule())
+            for path in self.cfg.generate_paths(BasicPath.empty(), set())
+        ]
+
+    def check(self) -> CheckResult:
+        solver = z3.SolverFor("HORN")
+        for p in self.get_proof_rule():
+            solver.add(p.as_z3())
+        result = solver.check()
+        if result.r == 1:
+            model = solver.model()
+            invariants: list[HornInvariant] = []
+            for invariant in self.invariants:
+                d = next(d for d in model.decls() if d.name() == invariant.name)
+                fn = model.get_interp(d)
+                assert isinstance(fn, z3.FuncInterp)
+                else_value = fn.else_value()
+                mapping = fn.as_list()
+                if else_value is not None:
+                    mapping = mapping[:-1]
+                invariants.append(
+                    HornInvariant(
+                        invariant.name,
+                        [(Expr.from_z3(x), Expr.from_z3(y)) for x, y in mapping],
+                        None
+                        if else_value is None
+                        else Expr.from_z3(else_value, invariant.vars),
+                    )
+                )
+            return HornOk(invariants)
+        elif result.r == -1:
+            return HornFail()
+        else:
+            return Unknown(result.r)
+
     @staticmethod
     def set_cutpoints(cfg: CfgNode, vars: list[Variable]) -> list[Predicate]:
         graph = nx.DiGraph()
@@ -441,3 +444,13 @@ class Function:
                 else:
                     assert False, f"unexpected node of type {type(node)}"
         return invariants
+
+    @classmethod
+    def from_ast(cls, filename: str, ast: AstNode) -> HornFunction:
+        base = super().from_ast(filename, ast, invariants=[])
+        assert isinstance(base, HornFunction)
+        base.invariants.extend(
+            HornFunction.set_cutpoints(base.cfg, base.vars + base.params)
+        )
+        return base
+

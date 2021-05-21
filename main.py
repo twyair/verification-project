@@ -3,13 +3,13 @@ import json
 import os
 
 from cast import parse, AstType
-from function import Function
+from function import BaseFunction, Function, HornFunction
 
 
 PATH = "benchmarks/{}.json"
 
 
-def get_functions(filename: str, horn: bool = False) -> dict[str, Function]:
+def get_functions(filename: str, horn: bool = False) -> dict[str, BaseFunction]:
     err = os.system(f'./comp-benchmark.sh "{filename}"')
     if err != 0:
         raise Exception(f"error code: {err}")
@@ -22,7 +22,7 @@ def get_functions(filename: str, horn: bool = False) -> dict[str, Function]:
     return {
         f.name: f
         for f in (
-            Function.from_ast(filename, child, horn=horn)
+            (HornFunction if horn else Function).from_ast(filename, child)
             for child in ast.children
             if child.type == AstType.function_definition
         )

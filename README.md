@@ -8,12 +8,13 @@
 - [ ] support implicit casts
 - [ ] handle fixed size ints as bitvectors
 - [ ] implement an `is_nan()` operator
+- [ ] make the parser work with float literals
 - [X] implement phantom variables
 - [X] implement `assume()`
-- [ ] make the parser work with float literals
 - [X] implement a simple gui
 - [X] add source locations to the cfg
 - [ ] implement a gui for horn (invariants synthesis)
+- [ ] (horn) allow providing partial invariants
 
 ## features
 
