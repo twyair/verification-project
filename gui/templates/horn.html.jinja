@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+
+<link rel= "stylesheet" type= "text/css" href= "{{ url_for('static',filename='styles/verifier.css') }}">
+
+<pre><code id="code" class='C++ code-block' data-curr_line="{{ curr_line }}" data-total_lines="{{ total_lines }}">{{ program }}</code></pre>
+
+<div class="interface">
+    {% if ok %}
+    <div>
+        <h2>OK</h2>
+        <select id="select-invariant" size="5" onchange="select_invariant()">
+            {% for inv in invariants %}
+                <option value="{{ inv.index }}">{{ inv.name }}</option>
+            {% endfor %}
+        </select>
+
+        {% for inv in invariants %}
+            <div id="inv{{ inv.index }}" hidden>{{ inv.expr }}</div>
+        {% endfor %}
+    </diva>
+    {% else %}
+    <div>
+        <h2>FAIL</h2>
+    </div>
+    {% endif %}
+</div>
+
+<script src="{{ url_for('static',filename='js/horn.js') }}"></script>
+
+</body>
+</html>

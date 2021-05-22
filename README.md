@@ -13,7 +13,7 @@
 - [X] implement `assume()`
 - [X] implement a simple gui
 - [X] add source locations to the cfg
-- [ ] implement a gui for horn (invariants synthesis)
+- [X] implement a gui for horn (invariants synthesis)
 - [ ] (horn) allow providing partial invariants
 
 ## features

@@ -3,7 +3,7 @@ from cast import AstRange
 import itertools
 from html import escape
 import os
-from function import Function
+from function import Function, HornFunction, HornOk
 from cfg import BasicPath, StartNode
 from flask import Flask, render_template
 import z3
@@ -39,6 +39,7 @@ def range_to_class(r: AstRange) -> str:
 def verify_func(filename: str, func: str) -> str:
     fns = get_functions(filename)
     f = fns[func]
+    assert isinstance(f, Function)
 
     with open(f"benchmarks/{filename}.c") as src:
         src = src.read()
@@ -87,7 +88,7 @@ def verify_func(filename: str, func: str) -> str:
     models = []
     for path in paths:
         s = z3.Solver()
-        s.add(Not(None, path.get_proof_rule()).as_z3())
+        s.add(Not(path.get_proof_rule()).as_z3())
         s.check()
         models.append(s.model())
 
@@ -98,7 +99,7 @@ def verify_func(filename: str, func: str) -> str:
         props=props,
         paths=enumerate(
             {
-                "reachability": str(And(None, tuple(path.reachability))),
+                "reachability": str(And(tuple(path.reachability))),
                 "transformation": [
                     f"{var} := {val}" for var, val in path.transformation.items()
                 ],
@@ -118,3 +119,36 @@ def verify_func(filename: str, func: str) -> str:
         curr_line=ranges[0].start_line - 2,
         total_lines=len(lines),
     )
+
+
+@app.route("/<filename>/<func>/horn.html")
+def horn(filename: str, func: str) -> str:
+    fns = get_functions(filename, horn=True)
+    f = fns[func]
+    assert isinstance(f, HornFunction)
+
+    min_range = min(
+        itertools.chain.from_iterable(
+            get_ranges(p) for p in f.cfg.generate_paths(BasicPath.empty(), set())
+        )
+    )
+
+    with open(f"benchmarks/{filename}.c") as src:
+        src = src.read()
+
+    result = f.check()
+
+    return render_template(
+        "horn.html.jinja",
+        program=src,
+        ok=result.is_ok(),
+        invariants=[
+            {"index": i, "name": inv.name, "expr": str(inv)}
+            for i, inv in enumerate(result.invariants)
+        ]
+        if isinstance(result, HornOk)
+        else None,
+        curr_line=min_range.start_line - 2,
+        total_lines=src.count("\n"),
+    )
+
