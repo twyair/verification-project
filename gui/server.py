@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import cast
 from cast import AstRange
 import itertools
 from html import escape
@@ -35,23 +36,7 @@ def range_to_class(r: AstRange) -> str:
     return f"range_{r.start_line}_{r.start_column}_{r.end_line}_{r.end_column}"
 
 
-@app.route("/<filename>/<func>/verify.html")
-def verify_func(filename: str, func: str) -> str:
-    fns = get_functions(filename)
-    f = fns[func]
-    assert isinstance(f, Function)
-
-    with open(f"benchmarks/{filename}.c") as src:
-        src = src.read()
-
-    ranges = sorted(
-        set(
-            itertools.chain.from_iterable(
-                get_ranges(p) for p in f.cfg.generate_paths(BasicPath.empty(), set())
-            )
-        )
-    )
-
+def src_mark_ranges(src: str, ranges: list[AstRange]) -> str:
     lines = src.splitlines()
     fin_src = ""
     line_number = 0  # 0-based
@@ -82,6 +67,28 @@ def verify_func(filename: str, func: str) -> str:
     fin_src, line_number, column_number = copy_until_line(
         fin_src, line_number, column_number, len(lines)
     )
+
+    return fin_src
+
+
+@app.route("/<filename>/<func>/verify.html")
+def verify_func(filename: str, func: str) -> str:
+    fns = get_functions(filename)
+    f = fns[func]
+    assert isinstance(f, Function)
+
+    with open(f"benchmarks/{filename}.c") as src:
+        src = src.read()
+
+    ranges = sorted(
+        set(
+            itertools.chain.from_iterable(
+                get_ranges(p) for p in f.cfg.generate_paths(BasicPath.empty(), set())
+            )
+        )
+    )
+
+    fin_src = src_mark_ranges(src, ranges)
 
     paths = list(f.get_failing_paths())
     props = enumerate(str(p.get_proof_rule()) for p in paths)
@@ -117,7 +124,7 @@ def verify_func(filename: str, func: str) -> str:
             }
         ),
         curr_line=ranges[0].start_line - 2,
-        total_lines=len(lines),
+        total_lines=src.count("\n"),
     )
 
 
@@ -136,15 +143,25 @@ def horn(filename: str, func: str) -> str:
     with open(f"benchmarks/{filename}.c") as src:
         src = src.read()
 
+    ranges = [cast(AstRange, cp.code_location) for cp in f.cutpoints]
+    assert all(r is not None for r in ranges)
+
+    fin_src = src_mark_ranges(src, ranges)
+
     result = f.check()
 
     return render_template(
         "horn.html.jinja",
-        program=src,
+        program=fin_src,
         ok=result.is_ok(),
         invariants=[
-            {"index": i, "name": inv.name, "expr": str(inv)}
-            for i, inv in enumerate(result.invariants)
+            {
+                "index": i,
+                "name": inv.name,
+                "expr": str(inv),
+                "range": range_to_class(rng),
+            }
+            for i, (inv, rng) in enumerate(zip(result.invariants, ranges))
         ]
         if isinstance(result, HornOk)
         else None,

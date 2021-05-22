@@ -15,6 +15,7 @@
 - [X] add source locations to the cfg
 - [X] implement a gui for horn (invariants synthesis)
 - [ ] (horn) allow providing partial invariants
+- [X] (horn, gui) highlight cut points
 
 ## features
 

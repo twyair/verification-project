@@ -322,6 +322,7 @@ class Function(BaseFunction):
 @dataclass(frozen=True)
 class HornFunction(BaseFunction):
     invariants: list[Predicate]
+    cutpoints: list[CutpointNode]
 
     def get_proof_rule(self) -> list[Expr]:
         vars = self.vars + self.params
@@ -362,7 +363,9 @@ class HornFunction(BaseFunction):
             return Unknown(result.r)
 
     @staticmethod
-    def set_cutpoints(cfg: CfgNode, vars: list[Variable]) -> list[Predicate]:
+    def set_cutpoints(
+        cfg: CfgNode, vars: list[Variable]
+    ) -> tuple[list[Predicate], list[CutpointNode]]:
         graph = nx.DiGraph()
         id2node: dict[int, CfgNode] = {}
 
@@ -417,6 +420,7 @@ class HornFunction(BaseFunction):
         vars = sorted(vars, key=lambda v: v.var,)
         sorts = [v.type_.as_z3() for v in vars]
         invariants = []
+        cutpoint_nodes = []
 
         for index, cp in enumerate(cutpoints):
             node_cp = id2node[cp]
@@ -428,7 +432,8 @@ class HornFunction(BaseFunction):
                 vars=vars,
             )
             invariants.append(invariant)
-            new_node = CutpointNode(None, invariant, node_cp)
+            new_node = CutpointNode(node_cp.code_location, invariant, node_cp)
+            cutpoint_nodes.append(new_node)
             for n in graph.predecessors(cp):
                 node = id2node[n]
                 if isinstance(
@@ -443,14 +448,16 @@ class HornFunction(BaseFunction):
                         node.false_br = new_node
                 else:
                     assert False, f"unexpected node of type {type(node)}"
-        return invariants
+        return invariants, cutpoint_nodes
 
     @classmethod
     def from_ast(cls, filename: str, ast: AstNode) -> HornFunction:
-        base = super().from_ast(filename, ast, invariants=[])
+        base = super().from_ast(filename, ast, invariants=[], cutpoints=[])
         assert isinstance(base, HornFunction)
-        base.invariants.extend(
-            HornFunction.set_cutpoints(base.cfg, base.vars + base.params)
+        invariants, cutpoints = HornFunction.set_cutpoints(
+            base.cfg, base.vars + base.params
         )
+        base.invariants.extend(invariants)
+        base.cutpoints.extend(cutpoints)
         return base
 

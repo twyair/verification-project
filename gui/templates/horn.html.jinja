@@ -7,7 +7,7 @@
 
 <link rel= "stylesheet" type= "text/css" href= "{{ url_for('static',filename='styles/verifier.css') }}">
 
-<pre><code id="code" class='C++ code-block' data-curr_line="{{ curr_line }}" data-total_lines="{{ total_lines }}">{{ program }}</code></pre>
+<pre><code id="code" class='C++ code-block' data-curr_line="{{ curr_line }}" data-total_lines="{{ total_lines }}">{{ program|safe }}</code></pre>
 
 <div class="interface">
     {% if ok %}
@@ -20,7 +20,7 @@
         </select>
 
         {% for inv in invariants %}
-            <div id="inv{{ inv.index }}" hidden>{{ inv.expr }}</div>
+            <div id="inv{{ inv.index }}" hidden data-range="{{ inv.range }}">{{ inv.expr }}</div>
         {% endfor %}
     </diva>
     {% else %}
