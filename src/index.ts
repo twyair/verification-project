@@ -11,6 +11,7 @@ class IDE {
     };
     cm: CodeMirror.Editor;
     paths: any[] | null;
+    invariants: any[] | null;
 
     constructor() {
         this.panels = {
@@ -44,8 +45,15 @@ int array_max_bug(int arr[], int size) {
         });
 
         this.panels.output
-            .querySelector("button")
+            .querySelector("#verify")
             .addEventListener("click", () => this.runVerifier());
+
+        this.panels.output
+            .querySelector("#horn")
+            .addEventListener("click", () => this.run_horn());
+
+        this.invariants = null;
+        this.paths = null;
     }
 
     async open(uri: string) {
@@ -54,18 +62,52 @@ int array_max_bug(int arr[], int size) {
         this.cm.swapDoc(doc);
     }
 
-    async runVerifier() {
-        const out = await fetch("/verify", {
+    async run(uri: string): Promise<any> {
+        const out = await fetch(uri, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                action: "verify",
                 code: this.cm.getDoc().getValue(),
             }),
         });
-        const js = await out.json();
+        return await out.json();
+    }
+
+    async run_horn() {
+        this.clear_all_marks();
+        const js = await this.run("/horn");
+        if (js.ok) {
+            const output = this.panels.output.querySelector("#output");
+            if (js.verified) {
+                let ht = "<p>OK</p><button id='clear_locations'>clear</button>";
+                this.invariants = js.invariants;
+                for (const inv of this.invariants) {
+                    ht += `
+                        <div id=inv_${inv.index}>
+                        <h2>invariant ${inv.name}</h2>
+                        <button id="locate_inv_${inv.index}">locate</button>
+                        <p>${inv.expr}</p>
+                        </div>
+                    `;
+                }
+                output.innerHTML = ht;
+                for (const inv of this.invariants) {
+                    document.getElementById(`locate_inv_${inv.index}`).onclick =
+                        () => this.locate_inv(inv.index);
+                }
+                document.getElementById("clear_locations").onclick = () => this.clear_all_marks();
+            } else {
+                output.innerHTML = "<p>FAIL</p>";
+                this.invariants = null;
+            }
+        }
+    }
+
+    async runVerifier() {
+        this.clear_all_marks();
+        const js = await this.run("/verify");
         if (js.ok) {
             const output = this.panels.output.querySelector("#output");
             const fail_panel = this.panels.output.querySelector("#v-fail");
@@ -74,8 +116,10 @@ int array_max_bug(int arr[], int size) {
                 fail_panel.innerHTML = "";
                 this.paths = null;
             } else {
-                output.innerHTML = '<p>FAIL</p><button id="clear_paths">clear paths</button>';
-                document.getElementById("clear_paths").onclick = () => this.clear_all_marks();
+                output.innerHTML =
+                    '<p>FAIL</p><button id="clear_paths">clear paths</button>';
+                document.getElementById("clear_paths").onclick = () =>
+                    this.clear_all_marks();
                 let ht = "";
                 this.paths = js.body;
                 for (const p of js.body) {
@@ -111,17 +155,31 @@ int array_max_bug(int arr[], int size) {
         }
     }
 
+    highlight_range(range: {
+        start_line: number;
+        start_column: number;
+        end_line: number;
+        end_column: number;
+    }) {
+        this.cm.markText(
+            { line: range.start_line - 1, ch: range.start_column - 1 },
+            { line: range.end_line - 1, ch: range.end_column - 1 },
+            {
+                className: "highlight-code",
+            },
+        );
+    }
+
     show_path(index: number) {
         this.clear_all_marks();
         for (const range of this.paths[index].ranges) {
-            this.cm.markText(
-                { line: range.start_line - 1, ch: range.start_column - 1 },
-                { line: range.end_line - 1, ch: range.end_column - 1 },
-                {
-                    className: "highlight-code",
-                },
-            );
+            this.highlight_range(range);
         }
+    }
+
+    locate_inv(index: number) {
+        this.clear_all_marks();
+        this.highlight_range(this.invariants[index].range);
     }
 
     /* async listBenchmarks() {

@@ -48,11 +48,6 @@ html, body {
     overflow: scroll;
 }
 
-#panel-output #output {
-    font-family: Courier, monospace;
-    white-space: pre;
-}
-
 .highlight-code {
     background-color: yellow;
 }

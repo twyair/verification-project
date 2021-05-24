@@ -4,7 +4,7 @@ import json
 import subprocess
 from html import escape
 from dataclasses import asdict
-from typing import Any
+from typing import Any, cast
 
 import z3
 from flask import Flask, request
@@ -12,7 +12,7 @@ from flask import Flask, request
 from cast import AstRange
 from cfg import BasicPath
 from expr import And, Not
-from function import Function
+from function import BaseFunction, Function, HornFunction, HornOk
 from main import get_functions
 
 app = Flask(__name__)
@@ -33,8 +33,7 @@ def get_ranges(path: BasicPath) -> list[AstRange]:
     return [n.code_location for n in path.nodes if n.code_location is not None]
 
 
-@app.route("/verify", methods=["POST"])
-def verify():
+def get_function(horn: bool) -> BaseFunction | dict[str, Any]:
     req: dict[str, Any] = request.get_json()
     assert req is not None
     with open("tmp/code.c", "w") as f:
@@ -43,10 +42,17 @@ def verify():
     if res.returncode != 0:
         return {"ok": False, "returncode": res.returncode, "stderr": res.stderr}
 
-    fns = get_functions("tmp/code.json")
+    fns = get_functions("tmp/code.json", horn=horn)
     subprocess.run(["rm"] + ["tmp/code." + s for s in ["c", "c1", "ii", "json"]])
     assert len(fns) == 1
-    f = next(iter(fns.values()))
+    return next(iter(fns.values()))
+
+
+@app.route("/verify", methods=["POST"])
+def verify():
+    f = get_function(horn=False)
+    if isinstance(f, dict):
+        return f
     assert isinstance(f, Function)
 
     paths = list(f.get_failing_paths())
@@ -77,3 +83,31 @@ def verify():
     ]
 
     return {"ok": True, "body": paths_, "verified": not paths_}
+
+
+@app.route("/horn", methods=["POST"])
+def horn():
+    f = get_function(horn=True)
+    if isinstance(f, dict):
+        return f
+    assert isinstance(f, HornFunction)
+
+    result = f.check()
+    if isinstance(result, HornOk):
+
+        ranges = [cast(AstRange, cp.code_location) for cp in f.cutpoints]
+        assert all(r is not None for r in ranges)
+
+        invariants = [
+            dict(
+                index=i,
+                name=escape(inv.name),
+                expr=escape(str(inv)),
+                range=asdict(rng),
+            )
+            for i, (inv, rng) in enumerate(zip(result.invariants, ranges))
+        ]
+
+        return dict(ok=True, verified=True, invariants=invariants)
+    else:
+        return dict(ok=True, verified=False)
