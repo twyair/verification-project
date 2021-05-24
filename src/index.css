@@ -1,0 +1,58 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+#ide {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+#ide > div {
+    border-right: 1px solid #ccc;
+}
+
+#ide > #panel-benchmarks ul {
+    list-style: none;
+    padding-inline-start: 0;
+}
+
+#ide > #panel-benchmarks li::before {
+    content: "‣ ";
+}
+
+#ide > #panel-editor {
+    flex-grow: 1;
+    padding: 0;
+    width: 47vw;
+    height: 95vh;
+}
+
+#panel-editor .CodeMirror {
+    height: 100%;
+    background: #eee;
+}
+
+#panel-output {
+    padding-left: 2vw;
+    width: 47vw;
+    height: 95vh;
+    float: right;
+    overflow: scroll;
+}
+
+#panel-output #output {
+    font-family: Courier, monospace;
+    white-space: pre;
+}
+
+.highlight-code {
+    background-color: yellow;
+}

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections import defaultdict
 from dataclasses import dataclass
 import dataclasses
 import itertools
@@ -9,7 +10,7 @@ import z3
 from pygraphviz.agraph import AGraph
 import networkx as nx
 
-from cast import AstNode, AstRange, AstType
+from cast import AstNode, AstType
 from cfg import (
     AssertNode,
     AssignmentNode,
@@ -17,7 +18,6 @@ from cfg import (
     BasicPath,
     CfgNode,
     CondNode,
-    CutpointNode,
     DummyNode,
     EndNode,
     StartNode,
@@ -32,6 +32,7 @@ from expr import (
     Expr,
     Predicate,
     Prop,
+    Then,
     Variable,
 )
 
@@ -232,18 +233,8 @@ class BaseFunction:
                     id_,
                     color="purple",
                     label="assert",
-                    shape="octagon",
-                    content=f"{node.assertion}",
-                )
-                graph.add_edge(id_, get_id(node.next_node))
-                traverse(node.next_node)
-            elif isinstance(node, CutpointNode):
-                add_node(
-                    id_,
-                    color="orange",
-                    label="predicate",
                     shape="house",
-                    content=f"{node.predicate}",
+                    content=f"{node.assertion}",
                 )
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
@@ -322,13 +313,17 @@ class Function(BaseFunction):
 @dataclass(frozen=True)
 class HornFunction(BaseFunction):
     invariants: list[Predicate]
-    cutpoints: list[CutpointNode]
+    cutpoints: list[AssertNode]
+    partial_invariants: list[Expr]
 
     def get_proof_rule(self) -> list[Expr]:
         vars = self.vars + self.params
         return [
-            ForAll(vars, path.get_proof_rule())
+            cast(Expr, ForAll(vars, path.get_proof_rule()))
             for path in self.cfg.generate_paths(BasicPath.empty(), set())
+        ] + [
+            cast(Expr, ForAll(vars, Then(inv, partial_inv)))
+            for inv, partial_inv in zip(self.invariants, self.partial_invariants)
         ]
 
     def check(self) -> CheckResult:
@@ -362,22 +357,34 @@ class HornFunction(BaseFunction):
         else:
             return Unknown(result.r)
 
-    @staticmethod
-    def set_cutpoints(
-        cfg: CfgNode, vars: list[Variable]
-    ) -> tuple[list[Predicate], list[CutpointNode]]:
+    def set_cutpoints(self):
         graph = nx.DiGraph()
         id2node: dict[int, CfgNode] = {}
 
         def get_id(node: CfgNode) -> int:
             return id(node)
 
+        vars = sorted(self.vars + self.params, key=lambda v: v.var,)
+        sorts = [v.type_.as_z3() for v in vars]
+
         def traverse(node: CfgNode):
             id_ = get_id(node)
             if id_ in id2node:
                 return
             id2node[id_] = node
-            if isinstance(node, (StartNode, AssignmentNode, AssertNode, AssumeNode)):
+            if isinstance(node, AssertNode):
+                invariant = Predicate(
+                    name=f"P{len(self.invariants)}",
+                    arguments=cast("list[Expr]", vars),
+                    sorts=sorts,
+                    vars=vars,
+                )
+                self.invariants.append(invariant)
+                self.partial_invariants.append(node.assertion)
+                node.assertion = invariant
+                self.cutpoints.append(node)
+                traverse(node.next_node)
+            elif isinstance(node, (StartNode, AssignmentNode, AssumeNode)):
                 graph.add_node(id_,)
                 graph.add_edge(id_, get_id(node.next_node))
                 traverse(node.next_node)
@@ -394,15 +401,13 @@ class HornFunction(BaseFunction):
             else:
                 assert False
 
-        traverse(cfg)
+        traverse(self.cfg)
 
         cycles = list(nx.simple_cycles(graph))
-        node2cycle: dict[int, set[int]] = {
-            n: set() for n in set(itertools.chain.from_iterable(cycles))
-        }
+        node2cycle: dict[int, set[int]] = defaultdict(set)
         for i, c in enumerate(cycles):
             for n in c:
-                node2cycle[n] |= {i}
+                node2cycle[n].add(i)
 
         cutpoints: list[int] = []
         while node2cycle:
@@ -417,28 +422,22 @@ class HornFunction(BaseFunction):
                         del node2cycle[n]
             del node2cycle[point]
 
-        vars = sorted(vars, key=lambda v: v.var,)
-        sorts = [v.type_.as_z3() for v in vars]
-        invariants = []
-        cutpoint_nodes = []
-
-        for index, cp in enumerate(cutpoints):
+        for cp in cutpoints:
             node_cp = id2node[cp]
 
             invariant = Predicate(
-                name=f"P{index}",
+                name=f"P{len(self.invariants)}",
                 arguments=cast("list[Expr]", vars),
                 sorts=sorts,
                 vars=vars,
             )
-            invariants.append(invariant)
-            new_node = CutpointNode(node_cp.code_location, invariant, node_cp)
-            cutpoint_nodes.append(new_node)
+            self.invariants.append(invariant)
+            new_node = AssertNode(node_cp.code_location, invariant, node_cp)
+            self.cutpoints.append(new_node)
             for n in graph.predecessors(cp):
                 node = id2node[n]
                 if isinstance(
-                    node,
-                    (AssertNode, AssignmentNode, StartNode, CutpointNode, AssumeNode),
+                    node, (AssertNode, AssignmentNode, StartNode, AssumeNode),
                 ):
                     node.next_node = new_node
                 elif isinstance(node, CondNode):
@@ -448,16 +447,13 @@ class HornFunction(BaseFunction):
                         node.false_br = new_node
                 else:
                     assert False, f"unexpected node of type {type(node)}"
-        return invariants, cutpoint_nodes
 
     @classmethod
     def from_ast(cls, filename: str, ast: AstNode) -> HornFunction:
-        base = super().from_ast(filename, ast, invariants=[], cutpoints=[])
-        assert isinstance(base, HornFunction)
-        invariants, cutpoints = HornFunction.set_cutpoints(
-            base.cfg, base.vars + base.params
+        base = super().from_ast(
+            filename, ast, invariants=[], cutpoints=[], partial_invariants=[]
         )
-        base.invariants.extend(invariants)
-        base.cutpoints.extend(cutpoints)
+        assert isinstance(base, HornFunction)
+        base.set_cutpoints()
         return base
 

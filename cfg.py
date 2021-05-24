@@ -275,24 +275,6 @@ class AssertNode(CfgNode):
         self.next_node.replace(dummy, node, visited)
 
 
-@dataclass
-class CutpointNode(CfgNode):
-    predicate: Predicate
-    next_node: CfgNode
-
-    def generate_paths(
-        self, path: BasicPath, visited_asserts: set[int],
-    ) -> Iterator[BasicPath]:
-        yield path.assert_end(self.predicate).append(self)
-        if id(self) in visited_asserts:
-            return
-        visited_asserts.add(id(self))
-        yield from self.next_node.generate_paths(
-            BasicPath.empty().assert_start(self.predicate).append(self),
-            visited_asserts,
-        )
-
-
 @dataclass(frozen=True)
 class StatementEnvironment:
     next_node: CfgNode
