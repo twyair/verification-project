@@ -3,6 +3,7 @@ from itertools import chain
 from typing import Iterator, Optional, cast
 from dataclasses import dataclass
 import dataclasses
+import networkx as nx
 
 from cast import AstNode, AstRange, AstType
 from expr import (
@@ -609,3 +610,42 @@ def create_cfg(ast: AstNode, requires: Optional[Expr], env: Environment) -> CfgN
     builder.start_node.next_node = builder.create_cfg(body)
     return builder.start_node
 
+
+def get_paths(cfg: CfgNode) -> Iterator[BasicPath]:
+    graph = nx.DiGraph()
+    id2node: dict[int, CfgNode] = {}
+
+    def get_id(node: CfgNode) -> int:
+        return id(node)
+
+    def traverse(node: CfgNode):
+        id_ = get_id(node)
+        if id_ in id2node:
+            return
+        id2node[id_] = node
+        if isinstance(node, AssertNode):
+            traverse(node.next_node)
+        elif isinstance(node, (StartNode, AssignmentNode, AssumeNode)):
+            graph.add_node(id_,)
+            graph.add_edge(id_, get_id(node.next_node))
+            traverse(node.next_node)
+        elif isinstance(node, CondNode):
+            graph.add_node(id_,)
+            graph.add_edge(id_, get_id(node.true_br))
+            graph.add_edge(id_, get_id(node.false_br))
+            traverse(node.true_br)
+            traverse(node.false_br)
+        elif isinstance(node, EndNode):
+            graph.add_node(id_,)
+        elif isinstance(node, DummyNode):
+            graph.add_node(id_)
+        else:
+            assert False
+
+    traverse(cfg)
+
+    assert (
+        next(nx.simple_cycles(graph), None) is None
+    ), "found cycle without a cutpoint in cfg"
+
+    return cfg.generate_paths(BasicPath.empty(), set())

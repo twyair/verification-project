@@ -1,9 +1,6 @@
 from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
-import dataclasses
-import itertools
-from html import escape
 from typing import Iterator, Optional, cast
 
 import z3
@@ -22,6 +19,7 @@ from cfg import (
     EndNode,
     StartNode,
     create_cfg,
+    get_paths,
 )
 from expr import (
     And,
@@ -263,19 +261,14 @@ class BaseFunction:
 @dataclass(frozen=True)
 class Function(BaseFunction):
     def get_proof_rule(self) -> Expr:
-        rule = And(
-            tuple(
-                path.get_proof_rule()
-                for path in self.cfg.generate_paths(BasicPath.empty(), set())
-            ),
-        )
+        rule = And(tuple(path.get_proof_rule() for path in get_paths(self.cfg)),)
         if self.vars:
             return ForAll(self.vars, rule)
         else:
             return rule
 
     def get_failing_paths(self) -> Iterator[BasicPath]:
-        for path in self.cfg.generate_paths(BasicPath.empty(), set()):
+        for path in get_paths(self.cfg):
             prop = path.get_proof_rule()
             solver = z3.Solver()
             solver.add(z3.Not(prop.as_z3()))
@@ -320,7 +313,7 @@ class HornFunction(BaseFunction):
         vars = self.vars + self.params
         return [
             cast(Expr, ForAll(vars, path.get_proof_rule()))
-            for path in self.cfg.generate_paths(BasicPath.empty(), set())
+            for path in get_paths(self.cfg)
         ] + [
             cast(Expr, ForAll(vars, Then(inv, partial_inv)))
             for inv, partial_inv in zip(self.invariants, self.partial_invariants)

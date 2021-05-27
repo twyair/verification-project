@@ -40,7 +40,7 @@ def get_function(horn: bool) -> BaseFunction | dict[str, Any]:
         f.write(req["code"])
     res = subprocess.run(["./comp-benchmark.sh", "code"])
     if res.returncode != 0:
-        return {"ok": False, "returncode": res.returncode, "stderr": res.stderr}
+        return {"ok": False, "returncode": res.returncode, "err": res.stderr}
 
     fns = get_functions("tmp/code.json", horn=horn)
     subprocess.run(["rm"] + ["tmp/code." + s for s in ["c", "c1", "ii", "json"]])
@@ -55,7 +55,10 @@ def verify():
         return f
     assert isinstance(f, Function)
 
-    paths = list(f.get_failing_paths())
+    try:
+        paths = list(f.get_failing_paths())
+    except Exception as e:
+        return dict(ok=False, err=str(e))
     models = []
     for path in paths:
         s = z3.Solver()

@@ -12,6 +12,7 @@ class IDE {
     cm: CodeMirror.Editor;
     paths: any[] | null;
     invariants: any[] | null;
+    selected_path: any | null;
 
     constructor() {
         this.panels = {
@@ -22,7 +23,6 @@ class IDE {
 
         this.cm = CodeMirror(this.panels.editor, {
             lineNumbers: true,
-            //matchBrackets: true,
             mode: "text/x-csrc",
             indentUnit: 4,
             value: `#include "common.h"
@@ -43,6 +43,7 @@ int array_max_bug(int arr[], int size) {
     return max;
 }`,
         });
+        this.cm.on("change", (instance, changeObj) => this.clear_all_marks());
 
         this.panels.output
             .querySelector("#verify")
@@ -54,6 +55,7 @@ int array_max_bug(int arr[], int size) {
 
         this.invariants = null;
         this.paths = null;
+        this.selected_path = null;
     }
 
     async open(uri: string) {
@@ -78,8 +80,9 @@ int array_max_bug(int arr[], int size) {
     async run_horn() {
         this.clear_all_marks();
         const js = await this.run("/horn");
+        const output = this.panels.output.querySelector("#output");
         if (js.ok) {
-            const output = this.panels.output.querySelector("#output");
+            this.panels.output.querySelector("#v-fail").innerHTML = "";
             if (js.verified) {
                 let ht = "<p>OK</p><button id='clear_locations'>clear</button>";
                 this.invariants = js.invariants;
@@ -102,15 +105,17 @@ int array_max_bug(int arr[], int size) {
                 output.innerHTML = "<p>FAIL</p>";
                 this.invariants = null;
             }
+        } else {
+            output.innerHTML = `<h2>ERROR</h2><p>${js.err}</p>`;
         }
     }
 
     async runVerifier() {
         this.clear_all_marks();
         const js = await this.run("/verify");
+        const output = this.panels.output.querySelector("#output");
+        const fail_panel = this.panels.output.querySelector("#v-fail");
         if (js.ok) {
-            const output = this.panels.output.querySelector("#output");
-            const fail_panel = this.panels.output.querySelector("#v-fail");
             if (js.verified) {
                 output.textContent = "OK";
                 fail_panel.innerHTML = "";
@@ -121,10 +126,15 @@ int array_max_bug(int arr[], int size) {
                 document.getElementById("clear_paths").onclick = () =>
                     this.clear_all_marks();
                 let ht = "";
+                ht += "<select id='select_path'><option disabled selected value> -- select an option -- </option>"
+                for (let i = 0; i < js.body.length; i++) {
+                    ht += `<option value="path_${i}">path ${i}</option>`;
+                }
+                ht += "</select>"
                 this.paths = js.body;
                 for (const p of js.body) {
                     ht += `
-                    <div id="path_${p.index}">
+                    <div id="path_${p.index}" hidden>
                     <h2>path ${p.index}</h2>
                     <p>${p.prop}</p>
                     <button id="show_path_${p.index}">show path</button>
@@ -145,8 +155,21 @@ int array_max_bug(int arr[], int size) {
                     document.getElementById(`show_path_${p.index}`).onclick =
                         () => this.show_path(p.index);
                 }
+                document.getElementById("select_path").onchange = () => this.select_path();
             }
+        } else {
+            output.innerHTML = `<h2>ERROR</h2><p>${js.err}</p>`;
+            fail_panel.innerHTML = "";
         }
+    }
+
+    select_path() {
+        const path_id = document.getElementById("select_path").value;
+        if (this.selected_path !== null) {
+            document.getElementById(this.selected_path).setAttribute("hidden", "");
+        }
+        document.getElementById(path_id).removeAttribute("hidden");
+        this.selected_path = path_id;
     }
 
     clear_all_marks() {
