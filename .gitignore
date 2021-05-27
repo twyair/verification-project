@@ -4,4 +4,4 @@ cfg-img/
 .vscode
 node_modules
 tmp
-static/
+static
