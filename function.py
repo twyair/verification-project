@@ -310,7 +310,7 @@ class HornFunction(BaseFunction):
     partial_invariants: list[Expr]
 
     def get_proof_rule(self) -> list[Expr]:
-        vars = self.vars + self.params
+        vars = self.params + self.vars
         return [
             cast(Expr, ForAll(vars, path.get_proof_rule()))
             for path in get_paths(self.cfg)
@@ -319,10 +319,19 @@ class HornFunction(BaseFunction):
             for inv, partial_inv in zip(self.invariants, self.partial_invariants)
         ]
 
-    def check(self) -> CheckResult:
+    def __make_solver(self) -> z3.Solver:
         solver = z3.SolverFor("HORN")
+        solver.set("engine", "spacer")
+        # allow quantified variables in pobs
+        solver.set("spacer.ground_pobs", False)
+        # enable quantified generalization
+        solver.set("spacer.q3.use_qgen", True)
         for p in self.get_proof_rule():
             solver.add(p.as_z3())
+        return solver
+
+    def check(self) -> CheckResult:
+        solver = self.__make_solver()
         result = solver.check()
         if result.r == 1:
             model = solver.model()
@@ -357,7 +366,7 @@ class HornFunction(BaseFunction):
         def get_id(node: CfgNode) -> int:
             return id(node)
 
-        vars = sorted(self.vars + self.params, key=lambda v: v.var,)
+        vars = self.vars + self.params
         sorts = [v.type_.as_z3() for v in vars]
 
         def traverse(node: CfgNode):

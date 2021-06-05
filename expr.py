@@ -17,6 +17,21 @@ class Type:
     def __str__(self) -> str:
         raise NotImplementedError
 
+    @staticmethod
+    def from_z3(sort: z3.ArithSortRef) -> Type:
+        name = sort.name()
+        if name == "Int":
+            return AtomicType("int")
+        elif name == "Bool":
+            return AtomicType("bool")
+        elif name == "Real":
+            return AtomicType("float")
+        elif name == "Array":
+            # FIXME
+            return ArrayType(AtomicType("int"))
+        else:
+            assert False
+
 
 @dataclass(frozen=True)
 class AtomicType(Type):
@@ -245,6 +260,22 @@ class Expr:
 
     @staticmethod
     def from_z3(z, ctx: list[Variable] = None) -> Expr:
+        if hasattr(z, "is_forall") and (z.is_forall() or z.is_exists()):
+            vars = [
+                Variable(z.var_name(i), Type.from_z3(z.var_sort(i)))
+                for i in range(z.num_vars())
+            ]
+            if ctx is None:
+                ctx = vars
+            else:
+                ctx = vars + ctx
+            prop = Expr.from_z3(z.children()[0], ctx)
+            if z.is_forall():
+                return ForAll(vars, prop)
+            assert False
+            # TODO:
+            # if z.is_exists():
+            #     return Exists(vars, prop)
         try:
             fn = z.decl().name()
         except:
@@ -252,7 +283,7 @@ class Expr:
             if sexpr.startswith("(:var"):
                 val = int(sexpr[len("(:var") : -1])
                 return ctx[val]
-            raise
+            raise Exception(z)
         if fn == "and":
             return And(tuple(Expr.from_z3(e, ctx) for e in z.children()))
         elif fn == "or":
@@ -263,6 +294,10 @@ class Expr:
             return BinaryExpr(
                 fn, Expr.from_z3(z.arg(0), ctx), Expr.from_z3(z.arg(1), ctx)
             )
+        elif fn == "select":
+            return ArraySelect(*(Expr.from_z3(z.arg(i), ctx) for i in range(2)))
+        elif fn == "store":
+            return ArrayStore(*(Expr.from_z3(z.arg(i), ctx) for i in range(3)))
         elif fn in (">=", "<=", "<", ">", "=", "!="):
             return RelExpr(fn, Expr.from_z3(z.arg(0), ctx), Expr.from_z3(z.arg(1), ctx))
         elif fn == "Int":
