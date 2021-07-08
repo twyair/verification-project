@@ -1,5 +1,29 @@
 # verification-project
 
+## building
+
+```bash
+npm run build
+```
+
+## web interface
+
+run:
+
+```bash
+npm start
+```
+
+and go to <http://127.0.0.1:5000/>
+
+you can click on any of the files listed under "benchmarks" or write a function yourself in the editor.
+
+## testing
+
+```bash
+python3 test.py
+```
+
 ## TODO
 
 - [X] support `switch`
@@ -14,7 +38,7 @@
 - [X] implement a simple gui
 - [X] add source locations to the cfg
 - [X] implement a gui for horn (invariants synthesis)
-- [ ] (horn) allow providing partial invariants
+- [X] (horn) allow providing partial invariants
 - [X] (horn, gui) highlight cut points
 
 ## features
