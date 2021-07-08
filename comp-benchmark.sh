@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if [ ! -f "tmp/$1.c" ]; then
+    cp benchmarks/$1.c tmp/
+fi
+
 sed -E 's/^(#(ifdef|endif))/\n\1/g' tmp/$1.c > tmp/$1.c1
 cp benchmarks/common.h tmp/
 cpp -DANNOTATIONS -traditional-cpp -C -P tmp/$1.c1 -o tmp/$1.ii

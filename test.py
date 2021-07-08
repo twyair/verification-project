@@ -5,7 +5,7 @@ import main
 
 class VerifierTests(unittest.TestCase):
     def test_array(self):
-        fns = main.get_functions("array")
+        fns = main.compile_functions("array")
         for f in [
             "max3_array",
             "max3_array_indirect",
@@ -15,7 +15,7 @@ class VerifierTests(unittest.TestCase):
                 self.assertTrue(fns[f].check().is_ok())
 
     def test_max3(self):
-        fns = main.get_functions("max3")
+        fns = main.compile_functions("max3")
         for f in [
             "max3_v1",
             "max3_v2",
@@ -25,7 +25,7 @@ class VerifierTests(unittest.TestCase):
                 self.assertTrue(fns[f].check().is_ok())
 
     def test_random(self):
-        fns = main.get_functions("random")
+        fns = main.compile_functions("random")
         for f in [
             "array_reverse",
             "vector_add",
@@ -50,7 +50,7 @@ class VerifierTests(unittest.TestCase):
                 self.assertFalse(fns[f].check().is_ok())
 
     def test_iterative_check(self):
-        fns = main.get_functions("random")
+        fns = main.compile_functions("random")
         for f in ["insertion_sort", "sqrt_v2", "sqrt_v3", "additive_factorial"]:
             with self.subTest(f"test_{f} failed\n"):
                 self.assertTrue(fns[f].check_iter().is_ok())
