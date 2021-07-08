@@ -164,7 +164,7 @@ int array_max_bug(int arr[], int size) {
     }
 
     select_path() {
-        const path_id = document.getElementById("select_path").value;
+        const path_id = (<HTMLSelectElement>document.getElementById("select_path")).value;
         if (this.selected_path !== null) {
             document.getElementById(this.selected_path).setAttribute("hidden", "");
         }
@@ -205,20 +205,26 @@ int array_max_bug(int arr[], int size) {
         this.highlight_range(this.invariants[index].range);
     }
 
-    /* async listBenchmarks() {
-        var ul = this.panels.benchmarks.querySelector("#benchmarks"),
+    async listBenchmarks() {
+        var ul = document.querySelector("#benchmarks"),
             items = await (await fetch("/benchmarks")).json();
         for (let item of items) {
             var li = document.createElement("li");
             li.textContent = item;
+            li.addEventListener("click", () => { this.get_source_code(item); });
             ul.append(li);
         }
-    } */
+    }
+
+    async get_source_code(filename: string) {
+        const code = await (await fetch(`/get_source?filename=${filename}`)).json();
+        this.cm.setValue(code.code);
+    }
 }
 
 function main() {
     var ide = new IDE();
-    // ide.listBenchmarks();
+    ide.listBenchmarks();
     ide.cm.focus();
 
     // ide.open('/');

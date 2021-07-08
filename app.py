@@ -5,6 +5,7 @@ import subprocess
 from html import escape
 from dataclasses import asdict
 from typing import Any, cast
+import os
 
 import z3
 from flask import Flask, request
@@ -26,7 +27,15 @@ def index():
 
 @app.route("/benchmarks")
 def list_benchmarks():
-    return json.dumps(["list your", "benchmakrs", "here"])
+    return json.dumps([f for f in os.listdir("benchmarks") if f.endswith(".c")])
+
+
+@app.route("/get_source", methods=["GET"])
+def get_source():
+    filename = request.args.get("filename")
+    with open(f"benchmarks/{filename}") as f:
+        code = f.read()
+    return {"code": code}
 
 
 def get_ranges(path: BasicPath) -> list[AstRange]:
