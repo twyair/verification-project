@@ -6,7 +6,7 @@ from typing import Any, Callable, ClassVar, Optional
 
 import z3
 
-from cast import AstNode, AstRange, AstType
+from cast import AstNode, AstType
 
 
 @dataclass(frozen=True)
@@ -290,10 +290,15 @@ class Expr:
             return Or(tuple(Expr.from_z3(e, ctx) for e in z.children()))
         elif fn == "not":
             return Not(Expr.from_z3(z.arg(0), ctx))
-        elif fn in ("+", "-", "*", "/", "%"):
-            return BinaryExpr(
+        elif fn in ("+", "-", "*", "/", "%", "div"):
+            if fn == "div":
+                fn = "/"
+            expr = BinaryExpr(
                 fn, Expr.from_z3(z.arg(0), ctx), Expr.from_z3(z.arg(1), ctx)
             )
+            for i in range(2, z.num_args()):
+                expr = BinaryExpr(fn, expr, Expr.from_z3(z.arg(i)))
+            return expr
         elif fn == "select":
             return ArraySelect(*(Expr.from_z3(z.arg(i), ctx) for i in range(2)))
         elif fn == "store":

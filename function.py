@@ -25,9 +25,11 @@ from expr import (
     And,
     ArrayType,
     AtomicType,
+    BoolValue,
     Environment,
     ForAll,
     Expr,
+    Not,
     Predicate,
     Prop,
     Then,
@@ -314,12 +316,9 @@ class HornFunction(BaseFunction):
         return [
             cast(Expr, ForAll(vars, path.get_proof_rule()))
             for path in get_paths(self.cfg)
-        ] + [
-            cast(Expr, ForAll(vars, Then(inv, partial_inv)))
-            for inv, partial_inv in zip(self.invariants, self.partial_invariants)
         ]
 
-    def __make_solver(self) -> z3.Solver:
+    def make_solver(self) -> z3.Solver:
         solver = z3.SolverFor("HORN")
         solver.set("engine", "spacer")
         # allow quantified variables in pobs
@@ -331,7 +330,7 @@ class HornFunction(BaseFunction):
         return solver
 
     def check(self) -> CheckResult:
-        solver = self.__make_solver()
+        solver = self.make_solver()
         result = solver.check()
         if result.r == 1:
             model = solver.model()
@@ -375,15 +374,7 @@ class HornFunction(BaseFunction):
                 return
             id2node[id_] = node
             if isinstance(node, AssertNode):
-                invariant = Predicate(
-                    name=f"P{len(self.invariants)}",
-                    arguments=cast("list[Expr]", vars),
-                    sorts=sorts,
-                    vars=vars,
-                )
-                self.invariants.append(invariant)
                 self.partial_invariants.append(node.assertion)
-                node.assertion = invariant
                 self.cutpoints.append(node)
                 traverse(node.next_node)
             elif isinstance(node, (StartNode, AssignmentNode, AssumeNode)):
