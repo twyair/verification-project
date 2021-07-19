@@ -259,7 +259,7 @@ class Expr:
             assert False, f"unknown type {ast.type.value}"
 
     @staticmethod
-    def from_z3(z, ctx: list[Variable] = None) -> Expr:
+    def from_z3(z, ctx: list[Variable]) -> Expr:
         if hasattr(z, "is_forall") and (z.is_forall() or z.is_exists()):
             vars = [
                 Variable(z.var_name(i), Type.from_z3(z.var_sort(i)))
@@ -297,7 +297,7 @@ class Expr:
                 fn, Expr.from_z3(z.arg(0), ctx), Expr.from_z3(z.arg(1), ctx)
             )
             for i in range(2, z.num_args()):
-                expr = BinaryExpr(fn, expr, Expr.from_z3(z.arg(i)))
+                expr = BinaryExpr(fn, expr, Expr.from_z3(z.arg(i), ctx))
             return expr
         elif fn == "select":
             return ArraySelect(*(Expr.from_z3(z.arg(i), ctx) for i in range(2)))
