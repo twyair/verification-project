@@ -206,14 +206,18 @@ int array_max_bug(int arr[], int size) {
     }
 
     async listBenchmarks() {
-        var ul = document.querySelector("#benchmarks"),
+        var select = document.querySelector("#benchmarks"),
             items = await (await fetch("/benchmarks")).json();
-        for (let item of items) {
-            var li = document.createElement("li");
-            li.textContent = item;
-            li.addEventListener("click", () => { this.get_source_code(item); });
-            ul.append(li);
+        for (let item of items.sort()) {
+            const option = document.createElement("option");
+            option.textContent = item;
+            option.value = item;
+            select.append(option);
         }
+        select.addEventListener("change", () => {
+            const val = (<HTMLSelectElement>document.querySelector("#benchmarks")).value;
+            this.get_source_code(val);
+        });
     }
 
     async get_source_code(filename: string) {
